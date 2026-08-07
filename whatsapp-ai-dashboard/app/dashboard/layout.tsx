@@ -7,6 +7,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Conversations' },
+  { href: '/dashboard/playground', label: 'Test Agent' },
   { href: '/dashboard/knowledge-base', label: 'Knowledge Base' },
   { href: '/dashboard/system-prompt', label: 'System Prompt' },
   { href: '/dashboard/usage', label: 'Usage' },

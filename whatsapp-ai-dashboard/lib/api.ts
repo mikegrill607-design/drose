@@ -49,6 +49,12 @@ export const backendApi = {
       body: JSON.stringify({ conversationId, text, staffId }),
     }),
 
+  testAi: (messages: { sender: 'customer' | 'ai' | 'staff'; content: string }[]) =>
+    backendFetch<{ reply: string; language: string; totalTokens: number }>('/staff/test-ai', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    }),
+
   createKbEntry: (entry: {
     topic: string;
     question: string;

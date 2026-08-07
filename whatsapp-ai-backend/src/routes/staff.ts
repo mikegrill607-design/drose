@@ -1,8 +1,48 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { generateAiReply } from '../lib/ai';
+import { detectLanguage } from '../lib/language';
+import { MessageSender } from '../types';
 
 export const staffRouter = Router();
+
+// Dashboard "Test Agent" playground: runs the exact same system prompt + KB +
+// LLM path as a real webhook reply, but never touches WhatsApp or the
+// conversations/messages tables -- lets staff sanity-check prompt/KB changes
+// before going live. Token usage is still logged (it's a real LLM call and
+// costs real money) but with conversation_id = null so it doesn't pollute any
+// customer's per-conversation breakdown on the Usage page.
+staffRouter.post('/test-ai', async (req, res) => {
+  const { messages } = req.body ?? {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    res.status(400).json({ error: 'messages (non-empty array) is required' });
+    return;
+  }
+
+  const validSenders: MessageSender[] = ['customer', 'ai', 'staff'];
+  const history = messages
+    .filter(
+      (m): m is { sender: MessageSender; content: string } =>
+        typeof m?.content === 'string' && validSenders.includes(m?.sender)
+    )
+    .map((m) => ({ sender: m.sender, content: m.content }));
+
+  if (history.length === 0) {
+    res.status(400).json({ error: 'no valid messages provided' });
+    return;
+  }
+
+  const lastCustomerMessage = [...history].reverse().find((m) => m.sender === 'customer');
+  const language = detectLanguage(lastCustomerMessage?.content ?? '');
+
+  try {
+    const result = await generateAiReply(null, language, history);
+    res.json({ reply: result.reply, language, totalTokens: result.totalTokens });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'AI call failed' });
+  }
+});
 
 // Manual reply from the dashboard -- also takes the conversation over.
 staffRouter.post('/send-message', async (req, res) => {

@@ -67,7 +67,9 @@ async function getKnowledgeBaseContext(language: DetectedLanguage): Promise<stri
   return `Knowledge base:\n${lines.join('\n\n')}`;
 }
 
-function formatHistory(messages: Message[]): string {
+type HistoryMessage = Pick<Message, 'sender' | 'content'>;
+
+function formatHistory(messages: HistoryMessage[]): string {
   return messages
     .map((m) => `${m.sender === 'customer' ? 'Customer' : 'Assistant'}: ${m.content}`)
     .join('\n');
@@ -80,10 +82,13 @@ export interface AiReplyResult {
   totalTokens: number;
 }
 
+// conversationId is null for the dashboard's "Test Agent" playground -- same
+// prompt/KB/LLM path as real webhook replies, just not tied to a real
+// conversation (and never sent over WhatsApp; see routes/staff.ts test-ai).
 export async function generateAiReply(
-  conversationId: string,
+  conversationId: string | null,
   language: DetectedLanguage,
-  recentMessages: Message[]
+  recentMessages: HistoryMessage[]
 ): Promise<AiReplyResult> {
   const [{ client, model }, systemPrompt, kbContext] = await Promise.all([
     getLlmClient(),
