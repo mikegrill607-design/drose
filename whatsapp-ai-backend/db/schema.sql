@@ -38,7 +38,8 @@ create table staff (
 -- WhatsApp Business + integration settings (managed from dashboard Settings page, not hardcoded env vars)
 create table app_settings (
   id uuid primary key default gen_random_uuid(),
-  key text unique not null, -- 'whatsapp_app_id' | 'whatsapp_phone_number_id' | 'whatsapp_access_token' | 'whatsapp_verify_token'
+  key text unique not null, -- 'whatsapp_app_id' | 'whatsapp_business_account_id' | 'whatsapp_phone_number_id'
+                             -- | 'whatsapp_access_token' | 'whatsapp_verify_token'
                              -- | 'llm_provider' ('groq' | 'openai') | 'llm_api_key' | 'llm_model'
   value text not null,
   updated_by uuid references staff(id),

@@ -155,7 +155,7 @@ export default function ConversationPage({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type a reply…"
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
+            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none"
           />
           <button
             onClick={handleSend}
@@ -179,7 +179,7 @@ export default function ConversationPage({
             value={followUpText}
             onChange={(e) => setFollowUpText(e.target.value)}
             placeholder="Custom follow-up message…"
-            className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs focus:border-neutral-500 focus:outline-none"
+            className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none"
           />
           <button
             onClick={handleSendFollowUp}

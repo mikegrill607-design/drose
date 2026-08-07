@@ -8,6 +8,7 @@ export default function SettingsPage() {
   const [waSettings, setWaSettings] = useState<Record<string, string>>({});
   const [waDraft, setWaDraft] = useState({
     whatsapp_app_id: '',
+    whatsapp_business_account_id: '',
     whatsapp_phone_number_id: '',
     whatsapp_access_token: '',
     whatsapp_verify_token: '',
@@ -22,20 +23,28 @@ export default function SettingsPage() {
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffNumber, setNewStaffNumber] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingLlm, setSavingLlm] = useState(false);
 
   async function loadAll() {
-    const [wa, llm, staffList] = await Promise.all([
-      backendApi.getWhatsAppSettings(),
-      backendApi.getLlmSettings(),
-      fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/settings/staff`).then((r) => r.json()),
-    ]);
-    setWaSettings(wa);
-    setLlmSettings(llm);
-    setLlmDraft((prev) => ({ ...prev, llm_provider: llm.llm_provider || 'groq' }));
-    setStaff(staffList ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [wa, llm, staffList] = await Promise.all([
+        backendApi.getWhatsAppSettings(),
+        backendApi.getLlmSettings(),
+        backendApi.getStaff(),
+      ]);
+      setWaSettings(wa);
+      setLlmSettings(llm);
+      setLlmDraft((prev) => ({ ...prev, llm_provider: llm.llm_provider || 'groq' }));
+      setStaff(staffList ?? []);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -48,7 +57,13 @@ export default function SettingsPage() {
       const updates = Object.fromEntries(Object.entries(waDraft).filter(([, v]) => v));
       if (Object.keys(updates).length === 0) return;
       await backendApi.updateWhatsAppSettings(updates);
-      setWaDraft({ whatsapp_app_id: '', whatsapp_phone_number_id: '', whatsapp_access_token: '', whatsapp_verify_token: '' });
+      setWaDraft({
+        whatsapp_app_id: '',
+        whatsapp_business_account_id: '',
+        whatsapp_phone_number_id: '',
+        whatsapp_access_token: '',
+        whatsapp_verify_token: '',
+      });
       await loadAll();
     } finally {
       setSaving(false);
@@ -84,6 +99,27 @@ export default function SettingsPage() {
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
 
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load settings: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadAll();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl p-6">
       <h1 className="mb-4 text-lg font-semibold text-neutral-900">Settings</h1>
@@ -101,6 +137,11 @@ export default function SettingsPage() {
             label={`App ID ${waSettings.whatsapp_app_id ? `(current: ${waSettings.whatsapp_app_id})` : ''}`}
             value={waDraft.whatsapp_app_id}
             onChange={(v) => setWaDraft({ ...waDraft, whatsapp_app_id: v })}
+          />
+          <Field
+            label={`WhatsApp Business Account ID (WABA) ${waSettings.whatsapp_business_account_id ? `(current: ${waSettings.whatsapp_business_account_id})` : ''}`}
+            value={waDraft.whatsapp_business_account_id}
+            onChange={(v) => setWaDraft({ ...waDraft, whatsapp_business_account_id: v })}
           />
           <Field
             label={`Phone Number ID ${waSettings.whatsapp_phone_number_id ? `(current: ${waSettings.whatsapp_phone_number_id})` : ''}`}
@@ -141,7 +182,7 @@ export default function SettingsPage() {
             <select
               value={llmDraft.llm_provider}
               onChange={(e) => setLlmDraft({ ...llmDraft, llm_provider: e.target.value })}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
             >
               <option value="groq">Groq (Llama 3.3 70B)</option>
               <option value="openai">OpenAI</option>
@@ -193,13 +234,13 @@ export default function SettingsPage() {
             placeholder="Name"
             value={newStaffName}
             onChange={(e) => setNewStaffName(e.target.value)}
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
           <input
             placeholder="WhatsApp number (e.g. 60123456789)"
             value={newStaffNumber}
             onChange={(e) => setNewStaffNumber(e.target.value)}
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
           <button
             onClick={handleAddStaff}
@@ -231,7 +272,7 @@ function Field({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
       />
     </div>
   );

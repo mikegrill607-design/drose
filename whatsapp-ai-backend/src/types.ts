@@ -52,6 +52,7 @@ export interface StaffRow {
 
 export type AppSettingKey =
   | 'whatsapp_app_id'
+  | 'whatsapp_business_account_id' // WABA ID
   | 'whatsapp_phone_number_id'
   | 'whatsapp_access_token'
   | 'whatsapp_verify_token'

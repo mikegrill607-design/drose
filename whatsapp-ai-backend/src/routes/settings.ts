@@ -7,6 +7,7 @@ export const settingsRouter = Router();
 
 const WHATSAPP_KEYS: AppSettingKey[] = [
   'whatsapp_app_id',
+  'whatsapp_business_account_id',
   'whatsapp_phone_number_id',
   'whatsapp_access_token',
   'whatsapp_verify_token',

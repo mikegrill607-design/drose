@@ -122,13 +122,13 @@ export default function KnowledgeBasePage() {
             placeholder="Topic (e.g. shipping)"
             value={draft.topic}
             onChange={(e) => setDraft({ ...draft, topic: e.target.value })}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
           <input
             placeholder="Example question"
             value={draft.question}
             onChange={(e) => setDraft({ ...draft, question: e.target.value })}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
         </div>
         <textarea
@@ -136,14 +136,14 @@ export default function KnowledgeBasePage() {
           value={draft.answer_ms}
           onChange={(e) => setDraft({ ...draft, answer_ms: e.target.value })}
           rows={3}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
         />
         <textarea
           placeholder="Answer (English)"
           value={draft.answer_en}
           onChange={(e) => setDraft({ ...draft, answer_en: e.target.value })}
           rows={3}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
         />
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-neutral-600">

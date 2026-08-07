@@ -1,13 +1,24 @@
 // Calls the Railway backend for any action that needs to send a WhatsApp
 // message or touch WhatsApp/LLM credentials -- the dashboard itself only
-// holds the Supabase anon key, never those secrets (spec Section 8b).
+// holds the Supabase anon key, never those secrets (spec Section 8b). Every
+// call forwards the staff member's Supabase session token so the backend
+// can verify who's asking (see src/lib/requireStaffAuth.ts) -- otherwise
+// these routes would be wide open to anyone who finds the Railway URL.
+
+import { getSupabaseClient } from './supabaseClient';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await getSupabaseClient().auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 async function backendFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()), ...options?.headers },
   });
 
   if (!res.ok) {
@@ -21,7 +32,11 @@ async function backendFetch<T>(path: string, options?: RequestInit): Promise<T> 
 // Separate from backendFetch because multipart/form-data must NOT get a
 // manual Content-Type header -- the browser sets the boundary itself.
 async function backendUpload<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: formData });
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    body: formData,
+    headers: await authHeaders(),
+  });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Backend request failed (${res.status}): ${body}`);
@@ -105,6 +120,11 @@ export const backendApi = {
       method: 'PUT',
       body: JSON.stringify({ ...updates, staffId }),
     }),
+
+  getStaff: () =>
+    backendFetch<{ id: string; name: string; whatsapp_number: string; auth_user_id: string | null }[]>(
+      '/settings/staff'
+    ),
 
   addStaff: (name: string, whatsapp_number: string) =>
     backendFetch('/settings/staff', {
