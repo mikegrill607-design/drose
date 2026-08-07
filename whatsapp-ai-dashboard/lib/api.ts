@@ -18,6 +18,17 @@ async function backendFetch<T>(path: string, options?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+// Separate from backendFetch because multipart/form-data must NOT get a
+// manual Content-Type header -- the browser sets the boundary itself.
+async function backendUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: formData });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Backend request failed (${res.status}): ${body}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export const backendApi = {
   sendMessage: (conversationId: string, text: string, staffId?: string) =>
     backendFetch('/staff/send-message', {
@@ -69,6 +80,12 @@ export const backendApi = {
   ) => backendFetch(`/kb/${id}`, { method: 'PUT', body: JSON.stringify(entry) }),
 
   deleteKbEntry: (id: string) => backendFetch(`/kb/${id}`, { method: 'DELETE' }),
+
+  extractPdfText: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return backendUpload<{ text: string }>('/kb/extract-pdf', formData);
+  },
 
   savePrompt: (content: string, staffId?: string) =>
     backendFetch('/system-prompt', { method: 'POST', body: JSON.stringify({ content, staffId }) }),

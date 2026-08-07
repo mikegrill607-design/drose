@@ -12,6 +12,8 @@ export default function KnowledgeBasePage() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   async function loadEntries() {
     const { data } = await getSupabaseClient().from('knowledge_base').select('*').order('topic');
@@ -37,6 +39,29 @@ export default function KnowledgeBasePage() {
   function resetDraft() {
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+
+    setExtracting(true);
+    setExtractError(null);
+    try {
+      const { text } = await backendApi.extractPdfText(file);
+      // Drops the raw extracted text into both answer fields as a starting
+      // point -- trim/translate before saving, same as typing it by hand.
+      setDraft((prev) => ({
+        ...prev,
+        answer_ms: prev.answer_ms || text,
+        answer_en: prev.answer_en || text,
+      }));
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : 'Failed to extract PDF text');
+    } finally {
+      setExtracting(false);
+    }
   }
 
   async function handleSave() {
@@ -72,9 +97,26 @@ export default function KnowledgeBasePage() {
       <h1 className="mb-4 text-lg font-semibold text-neutral-900">Knowledge Base</h1>
 
       <div className="mb-6 space-y-3 rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-neutral-800">
-          {editingId ? 'Edit entry' : 'New entry'}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-neutral-800">
+            {editingId ? 'Edit entry' : 'New entry'}
+          </h2>
+          <label className="cursor-pointer rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50">
+            {extracting ? 'Extracting…' : 'Upload PDF'}
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfUpload}
+              disabled={extracting}
+              className="hidden"
+            />
+          </label>
+        </div>
+        {extractError && <p className="text-xs text-red-600">{extractError}</p>}
+        <p className="text-xs text-neutral-400">
+          Uploading a PDF drops its extracted text into the answer fields below -- trim and translate before
+          saving, same as typing it by hand.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           <input
             placeholder="Topic (e.g. shipping)"
