@@ -16,8 +16,10 @@ export default function ConversationPage({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendingImage, setSendingImage] = useState(false);
   const [followUpText, setFollowUpText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -72,6 +74,22 @@ export default function ConversationPage({
     }
   }
 
+  async function handleImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+
+    setSendingImage(true);
+    try {
+      await backendApi.sendImage(conversationId, file, draft.trim() || undefined);
+      setDraft('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send image');
+    } finally {
+      setSendingImage(false);
+    }
+  }
+
   async function handleTakeOver() {
     await backendApi.takeOver(conversationId);
   }
@@ -96,7 +114,7 @@ export default function ConversationPage({
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-[calc(100vh-7rem)] flex-col sm:h-screen">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
         <div>
           <h1 className="text-sm font-semibold text-neutral-900">
@@ -138,7 +156,11 @@ export default function ConversationPage({
                     : 'bg-neutral-900 text-white'
               }`}
             >
-              <p>{m.content}</p>
+              {m.media_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL
+                <img src={m.media_url} alt="" className="mb-1 max-h-64 rounded-md object-cover" />
+              )}
+              {m.content && <p>{m.content}</p>}
               <p className="mt-1 text-[10px] opacity-70">
                 {m.sender} · {new Date(m.created_at).toLocaleTimeString()}
               </p>
@@ -151,10 +173,25 @@ export default function ConversationPage({
       <div className="border-t border-neutral-200 bg-white p-4">
         <div className="flex gap-2">
           <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelected}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendingImage}
+            title="Send a catalog photo"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50"
+          >
+            {sendingImage ? '…' : '📷'}
+          </button>
+          <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type a reply…"
+            placeholder="Type a reply… (or add a caption before attaching a photo)"
             className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none"
           />
           <button

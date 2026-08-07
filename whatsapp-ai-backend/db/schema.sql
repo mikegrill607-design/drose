@@ -21,7 +21,8 @@ create table messages (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid references conversations(id) not null,
   sender text not null, -- customer | ai | staff
-  content text not null,
+  content text not null, -- caption text; '' for an image with no caption
+  media_url text, -- set for image messages (catalog photos, customer-sent images)
   wa_message_id text,
   tokens_used int, -- populated for AI-generated messages
   created_at timestamptz not null default now()

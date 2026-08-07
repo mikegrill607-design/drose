@@ -150,8 +150,8 @@ export default function ConversationListPage() {
       ) : conversations.length === 0 ? (
         <p className="text-sm text-neutral-500">No conversations yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-neutral-500">
               <tr>
                 <th className="px-4 py-2 font-medium">Customer</th>

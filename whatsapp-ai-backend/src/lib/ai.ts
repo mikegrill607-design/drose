@@ -67,11 +67,14 @@ async function getKnowledgeBaseContext(language: DetectedLanguage): Promise<stri
   return `Knowledge base:\n${lines.join('\n\n')}`;
 }
 
-type HistoryMessage = Pick<Message, 'sender' | 'content'>;
+type HistoryMessage = Pick<Message, 'sender' | 'content' | 'media_url'>;
 
 function formatHistory(messages: HistoryMessage[]): string {
   return messages
-    .map((m) => `${m.sender === 'customer' ? 'Customer' : 'Assistant'}: ${m.content}`)
+    .map((m) => {
+      const body = m.content || (m.media_url ? '[sent an image]' : '');
+      return `${m.sender === 'customer' ? 'Customer' : 'Assistant'}: ${body}`;
+    })
     .join('\n');
 }
 

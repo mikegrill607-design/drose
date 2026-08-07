@@ -1,11 +1,25 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { supabase } from '../lib/supabase';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppImage } from '../lib/whatsapp';
+import { uploadChatMedia } from '../lib/chatMedia';
 import { generateAiReply } from '../lib/ai';
 import { detectLanguage } from '../lib/language';
 import { MessageSender } from '../types';
 
 export const staffRouter = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB, matches WhatsApp's own image limit
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Only image files are accepted'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 // Dashboard "Test Agent" playground: runs the exact same system prompt + KB +
 // LLM path as a real webhook reply, but never touches WhatsApp or the
@@ -26,7 +40,7 @@ staffRouter.post('/test-ai', async (req, res) => {
       (m): m is { sender: MessageSender; content: string } =>
         typeof m?.content === 'string' && validSenders.includes(m?.sender)
     )
-    .map((m) => ({ sender: m.sender, content: m.content }));
+    .map((m) => ({ sender: m.sender, content: m.content, media_url: null }));
 
   if (history.length === 0) {
     res.status(400).json({ error: 'no valid messages provided' });
@@ -77,6 +91,51 @@ staffRouter.post('/send-message', async (req, res) => {
     .eq('id', conversationId);
 
   res.json({ ok: true, staffId: staffId ?? null });
+});
+
+// Catalog/image send from the dashboard (or mobile web view) -- this is the
+// only way images go out once the number is on the Cloud API, since staff
+// can no longer dual-use a personal WhatsApp app on that same number.
+staffRouter.post('/send-image', upload.single('file'), async (req, res) => {
+  const { conversationId, caption, staffId } = req.body ?? {};
+  if (!conversationId || !req.file) {
+    res.status(400).json({ error: 'conversationId and file (multipart field "file") are required' });
+    return;
+  }
+
+  const { data: conversation, error: convErr } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .single();
+  if (convErr || !conversation) {
+    res.status(404).json({ error: 'conversation not found' });
+    return;
+  }
+
+  try {
+    const path = `${conversationId}/${Date.now()}-${req.file.originalname}`;
+    const publicUrl = await uploadChatMedia(path, req.file.buffer, req.file.mimetype);
+
+    const sentId = await sendWhatsAppImage(conversation.customer_phone, publicUrl, caption || undefined);
+
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender: 'staff',
+      content: caption || '',
+      media_url: publicUrl,
+      wa_message_id: sentId,
+    });
+
+    await supabase
+      .from('conversations')
+      .update({ status: 'staff_handling', last_ai_or_staff_message_at: new Date().toISOString() })
+      .eq('id', conversationId);
+
+    res.json({ ok: true, mediaUrl: publicUrl, staffId: staffId ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to send image' });
+  }
 });
 
 // Staff jumps into ANY conversation, not just flagged ones (spec Section 6).

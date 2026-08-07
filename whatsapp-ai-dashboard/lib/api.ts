@@ -51,6 +51,14 @@ export const backendApi = {
       body: JSON.stringify({ conversationId, text, staffId }),
     }),
 
+  sendImage: (conversationId: string, file: File, caption?: string) => {
+    const formData = new FormData();
+    formData.append('conversationId', conversationId);
+    formData.append('file', file);
+    if (caption) formData.append('caption', caption);
+    return backendUpload<{ ok: true; mediaUrl: string }>('/staff/send-image', formData);
+  },
+
   takeOver: (conversationId: string) =>
     backendFetch('/staff/take-over', {
       method: 'POST',

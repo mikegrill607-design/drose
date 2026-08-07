@@ -8,6 +8,7 @@ import { systemPromptRouter } from './routes/systemPrompt';
 import { settingsRouter } from './routes/settings';
 import { startFollowUpCron } from './cron/followUp';
 import { requireStaffAuth } from './lib/requireStaffAuth';
+import { ensureChatMediaBucket } from './lib/chatMedia';
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,7 @@ app.use('/kb', requireStaffAuth, kbRouter);
 app.use('/system-prompt', requireStaffAuth, systemPromptRouter);
 app.use('/settings', requireStaffAuth, settingsRouter);
 
+ensureChatMediaBucket();
 startFollowUpCron();
 
 const port = Number(process.env.PORT) || 3000;

@@ -20,6 +20,7 @@ export interface Message {
   conversation_id: string;
   sender: MessageSender;
   content: string;
+  media_url: string | null;
   wa_message_id: string | null;
   tokens_used: number | null;
   created_at: string;

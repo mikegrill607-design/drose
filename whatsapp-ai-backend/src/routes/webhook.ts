@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { getAppSettings } from '../lib/appSettings';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendWhatsAppMessage, downloadWhatsAppMedia } from '../lib/whatsapp';
+import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { checkQualifyingCombo } from '../lib/intent';
 import { generateAiReply } from '../lib/ai';
@@ -39,8 +40,21 @@ webhookRouter.post('/', async (req, res) => {
 
     const customerPhone: string = waMessage.from;
     const customerName: string | undefined = value?.contacts?.[0]?.profile?.name;
-    const text: string = waMessage.text?.body ?? '';
     const waMessageId: string = waMessage.id;
+
+    let text = '';
+    let mediaUrl: string | null = null;
+
+    if (waMessage.type === 'image' && waMessage.image?.id) {
+      text = waMessage.image.caption ?? '';
+      const media = await downloadWhatsAppMedia(waMessage.image.id);
+      if (media) {
+        const ext = media.mimeType.split('/')[1] ?? 'jpg';
+        mediaUrl = await uploadChatMedia(`${customerPhone}/${Date.now()}.${ext}`, media.buffer, media.mimeType);
+      }
+    } else {
+      text = waMessage.text?.body ?? '';
+    }
 
     const conversation = await upsertConversation(customerPhone, customerName, text);
 
@@ -48,6 +62,7 @@ webhookRouter.post('/', async (req, res) => {
       conversation_id: conversation.id,
       sender: 'customer',
       content: text,
+      media_url: mediaUrl,
       wa_message_id: waMessageId,
     });
 
