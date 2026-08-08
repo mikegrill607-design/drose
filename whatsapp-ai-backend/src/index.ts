@@ -11,7 +11,22 @@ import { requireStaffAuth } from './lib/requireStaffAuth';
 import { ensureChatMediaBucket } from './lib/chatMedia';
 
 const app = express();
-app.use(cors());
+// Auth here is a Bearer token the frontend sets explicitly (not an
+// auto-attached cookie), so a wide-open CORS policy isn't a classic CSRF
+// risk -- but restricting it to the dashboard's own domains is still cheap
+// defense-in-depth against a compromised/malicious third-party site probing
+// this API from a staff member's browser.
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || /\.vercel\.app$/.test(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+  })
+);
 // Captures the raw request bytes alongside the parsed body -- webhook.ts
 // needs the exact original bytes (not a re-serialized JSON.stringify) to
 // verify Meta's X-Hub-Signature-256 HMAC.
