@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import { backendApi } from '@/lib/api';
 import { StaffRow } from '@/lib/types';
 
+// Mirrors PROVIDER_DEFAULTS in whatsapp-ai-backend/src/lib/ai.ts -- only used
+// to show the owner what model is actually active when they've left the
+// override blank; the backend is the source of truth for what's really sent.
+const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
+  groq: 'llama-3.3-70b-versatile',
+  openai: 'gpt-4o-mini',
+};
+
 export default function SettingsPage() {
   const [waSettings, setWaSettings] = useState<Record<string, string>>({});
   const [waDraft, setWaDraft] = useState({
@@ -233,13 +241,21 @@ export default function SettingsPage() {
             onChange={(v) => setLlmDraft({ ...llmDraft, llm_api_key: v })}
             type="password"
           />
+          <div className="rounded-md bg-neutral-50 p-3 text-xs">
+            <span className="font-medium text-neutral-700">Model actually in use right now: </span>
+            <code className="text-neutral-600">
+              {llmSettings.llm_model || PROVIDER_DEFAULT_MODELS[llmDraft.llm_provider] || 'provider default'}
+            </code>
+            {!llmSettings.llm_model && <span className="text-neutral-400"> (provider default, no override set)</span>}
+          </div>
           <Field
             label={`Model override (optional) ${llmSettings.llm_model ? `(current: ${llmSettings.llm_model})` : ''}`}
             value={llmDraft.llm_model}
             onChange={(v) => setLlmDraft({ ...llmDraft, llm_model: v })}
+            placeholder={PROVIDER_DEFAULT_MODELS[llmDraft.llm_provider]}
           />
           <p className="text-xs text-neutral-400">
-            Leave the model blank to use the provider default (Groq: llama-3.3-70b-versatile, OpenAI: gpt-4o-mini).
+            Leave blank to keep using the provider default shown above.
           </p>
         </div>
 
@@ -325,11 +341,13 @@ function Field({
   value,
   onChange,
   type = 'text',
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -338,6 +356,7 @@ function Field({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
       />
     </div>
