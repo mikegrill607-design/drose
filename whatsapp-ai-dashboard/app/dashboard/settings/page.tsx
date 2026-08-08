@@ -248,14 +248,30 @@ export default function SettingsPage() {
             </code>
             {!llmSettings.llm_model && <span className="text-neutral-400"> (provider default, no override set)</span>}
           </div>
-          <Field
-            label={`Model override (optional) ${llmSettings.llm_model ? `(current: ${llmSettings.llm_model})` : ''}`}
-            value={llmDraft.llm_model}
-            onChange={(v) => setLlmDraft({ ...llmDraft, llm_model: v })}
-            placeholder={PROVIDER_DEFAULT_MODELS[llmDraft.llm_provider]}
-          />
+          {llmDraft.llm_provider === 'openai' ? (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-600">Model</label>
+              <select
+                value={llmDraft.llm_model || 'gpt-4o-mini'}
+                onChange={(e) => setLlmDraft({ ...llmDraft, llm_model: e.target.value })}
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
+              >
+                <option value="gpt-4o-mini">gpt-4o-mini -- cheaper, proven track record (recommended)</option>
+                <option value="gpt-5.4-nano">gpt-5.4-nano -- newer, ~2x pricier on output</option>
+              </select>
+            </div>
+          ) : (
+            <Field
+              label={`Model override (optional) ${llmSettings.llm_model ? `(current: ${llmSettings.llm_model})` : ''}`}
+              value={llmDraft.llm_model}
+              onChange={(v) => setLlmDraft({ ...llmDraft, llm_model: v })}
+              placeholder={PROVIDER_DEFAULT_MODELS[llmDraft.llm_provider]}
+            />
+          )}
           <p className="text-xs text-neutral-400">
-            Leave blank to keep using the provider default shown above.
+            {llmDraft.llm_provider === 'openai'
+              ? 'gpt-4o-mini is cheaper and better-proven for multilingual replies -- only switch if you want to compare quality.'
+              : 'Leave blank to keep using the provider default shown above.'}
           </p>
         </div>
 
