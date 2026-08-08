@@ -11,8 +11,9 @@ export default function SettingsPage() {
     whatsapp_business_account_id: '',
     whatsapp_phone_number_id: '',
     whatsapp_access_token: '',
-    whatsapp_verify_token: '',
   });
+  const [regeneratingToken, setRegeneratingToken] = useState(false);
+  const [copiedField, setCopiedField] = useState<'url' | 'token' | null>(null);
   const [llmSettings, setLlmSettings] = useState<Record<string, string>>({});
   const [llmDraft, setLlmDraft] = useState({
     llm_provider: 'groq',
@@ -62,11 +63,30 @@ export default function SettingsPage() {
         whatsapp_business_account_id: '',
         whatsapp_phone_number_id: '',
         whatsapp_access_token: '',
-        whatsapp_verify_token: '',
       });
       await loadAll();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCopy(field: 'url' | 'token', value: string) {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField((current) => (current === field ? null : current)), 1500);
+  }
+
+  async function handleRegenerateToken() {
+    if (!confirm('Generate a new verify token? The old one stops working immediately -- update Meta right after.')) {
+      return;
+    }
+    setRegeneratingToken(true);
+    try {
+      await backendApi.regenerateVerifyToken();
+      await loadAll();
+    } finally {
+      setRegeneratingToken(false);
     }
   }
 
@@ -127,9 +147,33 @@ export default function SettingsPage() {
       <section className="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-800">WhatsApp Business Connection</h2>
 
-        <div className="mb-3 rounded-md bg-neutral-50 p-3 text-xs">
-          <p className="font-medium text-neutral-700">Webhook callback URL (paste into Meta app config):</p>
-          <code className="break-all text-neutral-600">{waSettings.webhookCallbackUrl || 'Not configured'}</code>
+        <p className="mb-3 text-xs text-neutral-500">
+          Paste these into Meta Developer Portal → your App → WhatsApp → Configuration → Webhooks.
+        </p>
+
+        <div className="mb-3 space-y-2">
+          <CopyField
+            label="Callback URL"
+            value={waSettings.webhookCallbackUrl || 'Not configured'}
+            copied={copiedField === 'url'}
+            onCopy={() => handleCopy('url', waSettings.webhookCallbackUrl || '')}
+          />
+          <CopyField
+            label="Verify Token"
+            value={waSettings.whatsapp_verify_token || 'Loading…'}
+            copied={copiedField === 'token'}
+            onCopy={() => handleCopy('token', waSettings.whatsapp_verify_token || '')}
+          />
+          <button
+            onClick={handleRegenerateToken}
+            disabled={regeneratingToken}
+            className="text-xs text-neutral-500 underline hover:text-neutral-700 disabled:opacity-50"
+          >
+            {regeneratingToken ? 'Regenerating…' : 'Regenerate verify token'}
+          </button>
+          <p className="text-xs text-neutral-400">
+            Generated automatically -- after verifying in Meta, subscribe to the <code>messages</code> webhook field.
+          </p>
         </div>
 
         <div className="space-y-3">
@@ -153,11 +197,6 @@ export default function SettingsPage() {
             value={waDraft.whatsapp_access_token}
             onChange={(v) => setWaDraft({ ...waDraft, whatsapp_access_token: v })}
             type="password"
-          />
-          <Field
-            label="Webhook Verify Token"
-            value={waDraft.whatsapp_verify_token}
-            onChange={(v) => setWaDraft({ ...waDraft, whatsapp_verify_token: v })}
           />
         </div>
 
@@ -250,6 +289,33 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function CopyField({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="rounded-md bg-neutral-50 p-3 text-xs">
+      <p className="mb-1 font-medium text-neutral-700">{label}</p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 break-all text-neutral-600">{value}</code>
+        <button
+          onClick={onCopy}
+          className="shrink-0 rounded-md border border-neutral-300 bg-white px-2 py-1 text-neutral-600 hover:bg-neutral-100"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
     </div>
   );
 }

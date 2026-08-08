@@ -121,6 +121,11 @@ export const backendApi = {
       body: JSON.stringify({ ...updates, staffId }),
     }),
 
+  regenerateVerifyToken: () =>
+    backendFetch<{ whatsapp_verify_token: string }>('/settings/whatsapp/verify-token/regenerate', {
+      method: 'POST',
+    }),
+
   getLlmSettings: () => backendFetch<Record<string, string>>('/settings/llm'),
 
   updateLlmSettings: (updates: Record<string, string>, staffId?: string) =>

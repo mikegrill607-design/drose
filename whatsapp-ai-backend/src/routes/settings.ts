@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { invalidateAppSettingsCache } from '../lib/appSettings';
@@ -5,12 +6,16 @@ import { AppSettingKey } from '../types';
 
 export const settingsRouter = Router();
 
+// Editable via the "Update WhatsApp settings" form. whatsapp_verify_token is
+// deliberately excluded -- it's system-generated (see ensureVerifyToken)
+// rather than typed by a human, so Meta's webhook handshake secret can't be
+// weakened to something guessable and never goes out of sync between the DB
+// and what's pasted into Meta.
 const WHATSAPP_KEYS: AppSettingKey[] = [
   'whatsapp_app_id',
   'whatsapp_business_account_id',
   'whatsapp_phone_number_id',
   'whatsapp_access_token',
-  'whatsapp_verify_token',
 ];
 
 const LLM_KEYS: AppSettingKey[] = ['llm_provider', 'llm_api_key', 'llm_model'];
@@ -31,6 +36,31 @@ async function fetchSettings(keys: AppSettingKey[]): Promise<Partial<Record<AppS
     values[key] = SECRET_KEYS.includes(key) ? `••••••••${row.value.slice(-4)}` : row.value;
   }
   return values;
+}
+
+function generateVerifyToken(): string {
+  return `wa_${randomBytes(12).toString('hex')}`;
+}
+
+// Called on every GET so a fresh install gets a token without a manual step;
+// no-ops once one already exists. Not folded into fetchSettings because only
+// the whatsapp settings screen needs this side effect.
+async function ensureVerifyToken(): Promise<string> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'whatsapp_verify_token')
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.value) return data.value;
+
+  const token = generateVerifyToken();
+  const { error: upsertError } = await supabase
+    .from('app_settings')
+    .upsert({ key: 'whatsapp_verify_token', value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (upsertError) throw upsertError;
+  invalidateAppSettingsCache();
+  return token;
 }
 
 async function upsertSettings(
@@ -59,8 +89,12 @@ async function upsertSettings(
 // this table directly.
 settingsRouter.get('/whatsapp', async (_req, res) => {
   try {
-    const values = await fetchSettings(WHATSAPP_KEYS);
-    res.json({ ...values, webhookCallbackUrl: `${process.env.WEBHOOK_BASE_URL ?? ''}/webhook` });
+    const [values, verifyToken] = await Promise.all([fetchSettings(WHATSAPP_KEYS), ensureVerifyToken()]);
+    res.json({
+      ...values,
+      whatsapp_verify_token: verifyToken,
+      webhookCallbackUrl: `${(process.env.WEBHOOK_BASE_URL ?? '').trim()}/webhook`,
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'failed to load settings' });
   }
@@ -73,6 +107,23 @@ settingsRouter.put('/whatsapp', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
+  }
+});
+
+// Lets staff rotate the webhook secret (e.g. if it leaked) without redeploying.
+// Meta's app config must be updated with the new value immediately after --
+// the old token stops working the moment this returns.
+settingsRouter.post('/whatsapp/verify-token/regenerate', async (_req, res) => {
+  try {
+    const token = generateVerifyToken();
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'whatsapp_verify_token', value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) throw error;
+    invalidateAppSettingsCache();
+    res.json({ whatsapp_verify_token: token });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to regenerate token' });
   }
 });
 
