@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createHmac, timingSafeEqual } from 'crypto';
+import { Request, Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { getAppSettings } from '../lib/appSettings';
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from '../lib/whatsapp';
@@ -9,6 +10,30 @@ import { generateAiReply } from '../lib/ai';
 import { Conversation, Message } from '../types';
 
 export const webhookRouter = Router();
+
+// Confirms a POST really came from Meta (not someone who found the webhook
+// URL) by checking the X-Hub-Signature-256 HMAC against WA_APP_SECRET (Meta
+// Developer Portal -> App Settings -> Basic -> App Secret). Deliberately
+// fails OPEN (skips the check, just warns) when the secret isn't configured
+// yet, rather than fail closed and silently break live message delivery the
+// moment this code deploys, before the env var has been added.
+function verifyMetaSignature(req: Request): boolean {
+  const appSecret = process.env.WA_APP_SECRET;
+  if (!appSecret) {
+    console.warn('WA_APP_SECRET not set -- webhook signature verification is currently skipped');
+    return true;
+  }
+
+  const signatureHeader = req.headers['x-hub-signature-256'];
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (typeof signatureHeader !== 'string' || !rawBody) return false;
+
+  const expected = `sha256=${createHmac('sha256', appSecret).update(rawBody).digest('hex')}`;
+  const signatureBuf = Buffer.from(signatureHeader);
+  const expectedBuf = Buffer.from(expected);
+  if (signatureBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(signatureBuf, expectedBuf);
+}
 
 // --- GET: Meta webhook verification ---
 webhookRouter.get('/', async (req, res) => {
@@ -28,6 +53,11 @@ webhookRouter.get('/', async (req, res) => {
 
 // --- POST: inbound WhatsApp messages ---
 webhookRouter.post('/', async (req, res) => {
+  if (!verifyMetaSignature(req)) {
+    res.sendStatus(401);
+    return;
+  }
+
   // Ack immediately -- Meta retries aggressively on slow/failed responses.
   res.sendStatus(200);
 

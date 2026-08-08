@@ -12,7 +12,16 @@ import { ensureChatMediaBucket } from './lib/chatMedia';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Captures the raw request bytes alongside the parsed body -- webhook.ts
+// needs the exact original bytes (not a re-serialized JSON.stringify) to
+// verify Meta's X-Hub-Signature-256 HMAC.
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
