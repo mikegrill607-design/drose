@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { invalidateAppSettingsCache } from '../lib/appSettings';
+import { FOLLOW_UP_DEFAULTS, FOLLOW_UP_KEYS } from '../lib/followUpDefaults';
 import { AppSettingKey } from '../types';
 
 export const settingsRouter = Router();
@@ -146,6 +147,28 @@ settingsRouter.put('/llm', async (req, res) => {
   }
   try {
     await upsertSettings(updates, LLM_KEYS, staffId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
+  }
+});
+
+// Automatic Day 1/3/7 follow-up copy -- owner-editable so wording changes
+// don't need a code change + redeploy. Falls back to FOLLOW_UP_DEFAULTS for
+// any stage never customized yet (cron/followUp.ts does the same fallback).
+settingsRouter.get('/followup', async (_req, res) => {
+  try {
+    const values = await fetchSettings(FOLLOW_UP_KEYS);
+    res.json({ ...FOLLOW_UP_DEFAULTS, ...values });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to load settings' });
+  }
+});
+
+settingsRouter.put('/followup', async (req, res) => {
+  const { staffId, ...updates } = req.body ?? {};
+  try {
+    await upsertSettings(updates, FOLLOW_UP_KEYS, staffId);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });

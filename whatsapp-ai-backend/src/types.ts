@@ -59,4 +59,12 @@ export type AppSettingKey =
   | 'whatsapp_verify_token'
   | 'llm_provider' // 'groq' | 'openai'
   | 'llm_api_key'
-  | 'llm_model'; // optional override; defaults per-provider in src/lib/ai.ts
+  | 'llm_model' // optional override; defaults per-provider in src/lib/ai.ts
+  // Automatic follow-up copy (Day 1/3/7), owner-editable -- see
+  // src/lib/followUpDefaults.ts for the fallback text used until set.
+  | 'followup_day1_ms'
+  | 'followup_day1_en'
+  | 'followup_day3_ms'
+  | 'followup_day3_en'
+  | 'followup_day7_ms'
+  | 'followup_day7_en';

@@ -21,6 +21,7 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string }[] }[
       { href: '/dashboard/playground', label: 'Test Agent' },
       { href: '/dashboard/knowledge-base', label: 'Knowledge Base' },
       { href: '/dashboard/system-prompt', label: 'System Prompt' },
+      { href: '/dashboard/follow-up', label: 'Follow-Up Messages' },
     ],
   },
   {

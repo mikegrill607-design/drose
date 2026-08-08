@@ -132,6 +132,14 @@ export const backendApi = {
       body: JSON.stringify({ ...updates, staffId }),
     }),
 
+  getFollowUpSettings: () => backendFetch<Record<string, string>>('/settings/followup'),
+
+  updateFollowUpSettings: (updates: Record<string, string>, staffId?: string) =>
+    backendFetch('/settings/followup', {
+      method: 'PUT',
+      body: JSON.stringify({ ...updates, staffId }),
+    }),
+
   getStaff: () =>
     backendFetch<{ id: string; name: string; whatsapp_number: string; auth_user_id: string | null }[]>(
       '/settings/staff'

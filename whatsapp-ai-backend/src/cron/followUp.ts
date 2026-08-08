@@ -1,24 +1,16 @@
 import cron from 'node-cron';
 import { supabase } from '../lib/supabase';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { getAppSettings } from '../lib/appSettings';
+import { FOLLOW_UP_DEFAULTS, FollowUpKey } from '../lib/followUpDefaults';
 import { Conversation } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// TODO: confirm exact follow-up copy with the owner (spec Section 12).
-const FOLLOW_UP_COPY: Record<1 | 2 | 3, { ms: string; en: string }> = {
-  1: {
-    ms: 'Hai! Masih berminat dengan koleksi kami? Kami boleh bantu carikan yang sesuai 😊',
-    en: 'Hi! Still interested in our collection? Happy to help you find the right piece 😊',
-  },
-  2: {
-    ms: 'Hai lagi! Jangan lupa koleksi eksklusif kami -- kebanyakan design cuma ada satu helai je.',
-    en: "Just checking in! Don't forget our exclusive pieces -- most designs only have one available.",
-  },
-  3: {
-    ms: 'Last reminder ya -- kalau berminat lagi boleh terus mesej kami bila-bila masa 🙏',
-    en: 'Last reminder -- feel free to message us anytime if you change your mind 🙏',
-  },
+const STAGE_KEYS: Record<1 | 2 | 3, { ms: FollowUpKey; en: FollowUpKey }> = {
+  1: { ms: 'followup_day1_ms', en: 'followup_day1_en' },
+  2: { ms: 'followup_day3_ms', en: 'followup_day3_en' },
+  3: { ms: 'followup_day7_ms', en: 'followup_day7_en' },
 };
 
 async function processConversation(conversation: Conversation): Promise<void> {
@@ -35,7 +27,9 @@ async function processConversation(conversation: Conversation): Promise<void> {
   if (!nextStage) return;
 
   const language = conversation.detected_language === 'en' ? 'en' : 'ms';
-  const copy = FOLLOW_UP_COPY[nextStage][language];
+  const settingKey = STAGE_KEYS[nextStage][language];
+  const settings = await getAppSettings();
+  const copy = settings[settingKey] || FOLLOW_UP_DEFAULTS[settingKey];
 
   await sendWhatsAppMessage(conversation.customer_phone, copy);
 
