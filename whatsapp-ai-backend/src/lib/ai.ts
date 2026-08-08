@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase';
 import { getAppSettings } from './appSettings';
-import { DetectedLanguage, Message } from '../types';
+import { selectRelevantKb } from './kbRouter';
+import { KnowledgeBaseEntry, Message } from '../types';
 
 const HISTORY_LIMIT = 20;
 
@@ -50,21 +51,24 @@ async function getActiveSystemPrompt(): Promise<string> {
   return data?.content ?? 'You are a helpful WhatsApp assistant.';
 }
 
-async function getKnowledgeBaseContext(language: DetectedLanguage): Promise<string> {
+// Only pulls in categories relevant to what the customer's actually been
+// saying (see kbRouter.ts) instead of every active KB row on every call --
+// matters once there are 10+ products, each answered in full descriptive
+// text (spec Section 4).
+async function getKnowledgeBaseContext(recentMessages: HistoryMessage[]): Promise<string> {
   const { data, error } = await supabase
     .from('knowledge_base')
-    .select('topic, question, answer_ms, answer_en')
+    .select('topic, content, keywords')
     .eq('is_active', true);
 
   if (error) throw error;
   if (!data || data.length === 0) return '';
 
-  const lines = data.map((row) => {
-    const answer = language === 'ms' ? row.answer_ms : row.answer_en;
-    return `[${row.topic}] Q: ${row.question}\nA: ${answer ?? row.answer_ms ?? row.answer_en ?? ''}`;
-  });
+  const relevant = selectRelevantKb(data as KnowledgeBaseEntry[], recentMessages);
+  if (relevant.length === 0) return '';
 
-  return `Knowledge base:\n${lines.join('\n\n')}`;
+  const sections = relevant.map((row) => `[${row.topic}]\n${row.content}`);
+  return `Knowledge base (only sections relevant to the customer's messages -- may be in Bahasa Melayu, English, or both; translate/answer in the customer's language):\n${sections.join('\n\n')}`;
 }
 
 type HistoryMessage = Pick<Message, 'sender' | 'content' | 'media_url'>;
@@ -90,13 +94,12 @@ export interface AiReplyResult {
 // conversation (and never sent over WhatsApp; see routes/staff.ts test-ai).
 export async function generateAiReply(
   conversationId: string | null,
-  language: DetectedLanguage,
   recentMessages: HistoryMessage[]
 ): Promise<AiReplyResult> {
   const [{ client, model }, systemPrompt, kbContext] = await Promise.all([
     getLlmClient(),
     getActiveSystemPrompt(),
-    getKnowledgeBaseContext(language),
+    getKnowledgeBaseContext(recentMessages),
   ]);
 
   const history = formatHistory(recentMessages.slice(-HISTORY_LIMIT));

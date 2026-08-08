@@ -6,6 +6,7 @@
 // these routes would be wide open to anyone who finds the Railway URL.
 
 import { getSupabaseClient } from './supabaseClient';
+import { KnowledgeBaseEntry } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
 
@@ -89,26 +90,20 @@ export const backendApi = {
       body: JSON.stringify({ messages }),
     }),
 
-  createKbEntry: (entry: {
-    topic: string;
-    question: string;
-    answer_ms?: string;
-    answer_en?: string;
-    is_active?: boolean;
-  }) => backendFetch('/kb', { method: 'POST', body: JSON.stringify(entry) }),
+  // Parses the PDF and saves it as that category's document in one step --
+  // uploading the same topic again replaces its content.
+  uploadKbDocument: (topic: string, keywords: string, file: File) => {
+    const formData = new FormData();
+    formData.append('topic', topic);
+    formData.append('keywords', keywords);
+    formData.append('file', file);
+    return backendUpload<KnowledgeBaseEntry>('/kb/upload', formData);
+  },
 
-  updateKbEntry: (
-    id: string,
-    entry: { topic: string; question: string; answer_ms?: string; answer_en?: string; is_active: boolean }
-  ) => backendFetch(`/kb/${id}`, { method: 'PUT', body: JSON.stringify(entry) }),
+  updateKbEntry: (id: string, entry: { topic?: string; keywords?: string; is_active?: boolean }) =>
+    backendFetch(`/kb/${id}`, { method: 'PUT', body: JSON.stringify(entry) }),
 
   deleteKbEntry: (id: string) => backendFetch(`/kb/${id}`, { method: 'DELETE' }),
-
-  extractPdfText: (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return backendUpload<{ text: string }>('/kb/extract-pdf', formData);
-  },
 
   savePrompt: (content: string, staffId?: string) =>
     backendFetch('/system-prompt', { method: 'POST', body: JSON.stringify({ content, staffId }) }),

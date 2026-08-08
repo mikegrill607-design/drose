@@ -17,26 +17,6 @@ const upload = multer({
   },
 });
 
-// Extracts raw text from an uploaded PDF so staff can paste/trim it into a KB
-// entry instead of retyping it -- doesn't create anything on its own, just
-// returns text for the dashboard form to pre-fill (spec extension: see
-// whatsapp-ai-dashboard/app/dashboard/knowledge-base/page.tsx).
-kbRouter.post('/extract-pdf', upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: 'file is required (multipart field "file")' });
-    return;
-  }
-
-  try {
-    const parser = new PDFParse({ data: req.file.buffer });
-    const result = await parser.getText();
-    await parser.destroy();
-    res.json({ text: result.text });
-  } catch (err) {
-    res.status(422).json({ error: err instanceof Error ? err.message : 'failed to parse PDF' });
-  }
-});
-
 kbRouter.get('/', async (_req, res) => {
   const { data, error } = await supabase
     .from('knowledge_base')
@@ -49,33 +29,68 @@ kbRouter.get('/', async (_req, res) => {
   res.json(data);
 });
 
-kbRouter.post('/', async (req, res) => {
-  const { topic, question, answer_ms, answer_en, is_active } = req.body ?? {};
-  if (!topic || !question) {
-    res.status(400).json({ error: 'topic and question are required' });
+// One document per category (topic) -- parses the PDF and saves it in a
+// single step (no separate "extract, then paste into a form" flow). Uploading
+// the same topic again replaces its content (upsert on the topic unique
+// constraint), so re-uploading an updated product sheet just works.
+kbRouter.post('/upload', upload.single('file'), async (req, res) => {
+  const { topic, keywords } = req.body ?? {};
+  if (!topic) {
+    res.status(400).json({ error: 'topic is required' });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'file is required (multipart field "file")' });
     return;
   }
 
-  const { data, error } = await supabase
-    .from('knowledge_base')
-    .insert({ topic, question, answer_ms, answer_en, is_active: is_active ?? true })
-    .select('*')
-    .single();
+  try {
+    const parser = new PDFParse({ data: req.file.buffer });
+    const result = await parser.getText();
+    await parser.destroy();
 
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
+    if (!result.text.trim()) {
+      res.status(422).json({ error: 'no extractable text found in this PDF' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('knowledge_base')
+      .upsert(
+        {
+          topic,
+          keywords: keywords || null,
+          content: result.text,
+          source_filename: req.file.originalname,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'topic' }
+      )
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    res.status(422).json({ error: err instanceof Error ? err.message : 'failed to process PDF' });
   }
-  res.status(201).json(data);
 });
 
+// Metadata-only edits (rename category, tweak keywords, toggle active) --
+// content itself only changes by re-uploading a PDF via POST /kb/upload.
 kbRouter.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { topic, question, answer_ms, answer_en, is_active } = req.body ?? {};
+  const { topic, keywords, is_active } = req.body ?? {};
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (topic !== undefined) updates.topic = topic;
+  if (keywords !== undefined) updates.keywords = keywords || null;
+  if (is_active !== undefined) updates.is_active = is_active;
 
   const { data, error } = await supabase
     .from('knowledge_base')
-    .update({ topic, question, answer_ms, answer_en, is_active, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', id)
     .select('*')
     .single();

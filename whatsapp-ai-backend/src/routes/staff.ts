@@ -51,7 +51,7 @@ staffRouter.post('/test-ai', async (req, res) => {
   const language = detectLanguage(lastCustomerMessage?.content ?? '');
 
   try {
-    const result = await generateAiReply(null, language, history);
+    const result = await generateAiReply(null, history);
     res.json({ reply: result.reply, language, totalTokens: result.totalTokens });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'AI call failed' });

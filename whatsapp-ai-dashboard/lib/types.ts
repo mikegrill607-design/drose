@@ -28,10 +28,10 @@ export interface Message {
 
 export interface KnowledgeBaseEntry {
   id: string;
-  topic: string;
-  question: string;
-  answer_ms: string | null;
-  answer_en: string | null;
+  topic: string; // category label, e.g. "product_kemeja_daniel_rose" or "shipping"
+  content: string; // extracted PDF text (or typed), any language
+  keywords: string | null; // comma-separated aliases to widen matching, e.g. "baju,shirt,lelaki"
+  source_filename: string | null;
   is_active: boolean;
   updated_at: string;
 }

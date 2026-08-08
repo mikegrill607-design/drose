@@ -112,7 +112,7 @@ webhookRouter.post('/', async (req, res) => {
       await supabase.from('conversations').update({ detected_language: language }).eq('id', conversation.id);
     }
 
-    const ai = await generateAiReply(conversation.id, language, history ?? []);
+    const ai = await generateAiReply(conversation.id, history ?? []);
     if (!ai.reply) return;
 
     const sentId = await sendWhatsAppMessage(customerPhone, ai.reply);

@@ -63,13 +63,17 @@ create table follow_up_log (
   sent_by uuid references staff(id) -- null if sent by system
 );
 
--- Knowledge base
+-- Knowledge base: one uploaded-PDF document per category (topic), not
+-- manual Q&A rows. keywords widens what customer phrasing matches this
+-- category beyond what's literally in the topic name -- see
+-- src/lib/kbRouter.ts, which picks relevant categories per message instead
+-- of sending the whole KB on every AI call.
 create table knowledge_base (
   id uuid primary key default gen_random_uuid(),
-  topic text not null,
-  question text not null, -- example phrasing (BM or EN)
-  answer_ms text, -- Bahasa Melayu answer
-  answer_en text, -- English answer
+  topic text not null unique,
+  content text not null, -- extracted PDF text (or typed), any language -- the AI translates as needed
+  keywords text, -- comma-separated aliases, e.g. "baju,shirt,lelaki"
+  source_filename text,
   is_active boolean not null default true,
   updated_at timestamptz not null default now()
 );

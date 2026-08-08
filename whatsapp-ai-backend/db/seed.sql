@@ -10,94 +10,68 @@
 insert into staff (name, whatsapp_number)
 values ('TODO: set staff name', 'TODO_SET_IN_SETTINGS');
 
--- Knowledge base: product entries (verbatim from spec Section 4.1)
-insert into knowledge_base (topic, question, answer_ms, answer_en, is_active) values
+-- Knowledge base: one document per category (topic). content holds both BM
+-- and EN copy in one blob -- the AI translates/replies in whichever language
+-- it detects, it doesn't need a pre-split column per language (spec Section 4.1).
+-- keywords widens what customer phrasing matches this category (see
+-- src/lib/kbRouter.ts) beyond what's literally in the topic name.
+insert into knowledge_base (topic, keywords, content, is_active) values
 (
   'product_kemeja_daniel_rose',
-  'Kemeja lelaki ada?',
-  $$Nama Produk: Kemeja Batik Cotton DanielRose
+  'kemeja,baju lelaki,men shirt,shirt,daniel rose,danielrose',
+  $$Nama Produk: Kemeja Batik Cotton DanielRose / Product Name: Kemeja Batik Cotton DanielRose
 Brand: DanielRose
-Kategori: Kemeja Batik Lelaki
+Kategori: Kemeja Batik Lelaki / Category: Men's Batik Shirt
 Material: Cotton Lining
-Potongan: Regular Cut
-Jenis: Short Sleeve & Long Sleeve
-Harga Short Sleeve: RM159
-Harga Long Sleeve: RM199
+Potongan: Regular Cut / Cut: Regular cut
+Jenis: Short Sleeve & Long Sleeve / Type: Short sleeve & long sleeve
+Harga Short Sleeve: RM159 / Short sleeve price: RM159
+Harga Long Sleeve: RM199 / Long sleeve price: RM199
 
-Ciri-ciri:
-- Batik lukisan tangan.
-- Setiap corak adalah eksklusif.
-- Konsep One Design, One Owner -- kebanyakan design hanya tersedia satu helai.
-- Material cotton lining yang selesa dipakai dan tidak panas.
-- Sesuai untuk kerja, majlis, hadiah atau pakaian harian.
-- Boleh dicuci menggunakan mesin atau tangan.
-- Setiap pembelian disertakan kotak dan riben.$$,
-  $$Product Name: Kemeja Batik Cotton DanielRose
-Brand: DanielRose
-Category: Men's Batik Shirt
-Material: Cotton lining
-Cut: Regular cut
-Type: Short sleeve & long sleeve
-Short sleeve price: RM159
-Long sleeve price: RM199
-
-Features:
-- Hand-drawn batik.
-- Every pattern is exclusive.
-- "One Design, One Owner" concept -- most designs only have a single piece available.
-- Comfortable cotton lining material, not hot to wear.
-- Suitable for work, events, gifts, or everyday wear.
-- Machine or hand washable.
-- Every purchase comes with a box and ribbon.$$,
+Ciri-ciri / Features:
+- Batik lukisan tangan. / Hand-drawn batik.
+- Setiap corak adalah eksklusif. / Every pattern is exclusive.
+- Konsep One Design, One Owner -- kebanyakan design hanya tersedia satu helai. / "One Design, One Owner" concept -- most designs only have a single piece available.
+- Material cotton lining yang selesa dipakai dan tidak panas. / Comfortable cotton lining material, not hot to wear.
+- Sesuai untuk kerja, majlis, hadiah atau pakaian harian. / Suitable for work, events, gifts, or everyday wear.
+- Boleh dicuci menggunakan mesin atau tangan. / Machine or hand washable.
+- Setiap pembelian disertakan kotak dan riben. / Every purchase comes with a box and ribbon.$$,
   true
 ),
 (
   'product_kain_pasang',
-  'Ada kain pasang batik?',
-  $$Nama Produk: Kain Pasang Batik 4 Meter
+  'kain pasang,kain batik,fabric,batik fabric,kain',
+  $$Nama Produk: Kain Pasang Batik 4 Meter / Product Name: Kain Pasang Batik 4 Meter
 Brand: D'ROSE Batik
-Panjang: 4 meter
-Kategori: Kain Batik Wanita
-Material: Bergantung kepada koleksi seperti Crepe Silk dan Cotton Viscose.
-Rekaan: Batik lukisan tangan.
+Panjang: 4 meter / Length: 4 meters
+Kategori: Kain Batik Wanita / Category: Women's batik fabric
+Material: Bergantung kepada koleksi seperti Crepe Silk dan Cotton Viscose. / Material: Depends on collection, e.g. Crepe Silk and Cotton Viscose.
+Rekaan: Batik lukisan tangan. / Design: Hand-drawn batik.
 
-Ciri-ciri:
-- Panjang kain 4 meter.
-- Sesuai dibuat baju kurung, kebaya, dress atau rekaan mengikut citarasa pelanggan.
-- Terdapat pelbagai pilihan warna dan corak.
-- Kebanyakan design hanya satu helai.
-- Rekaan eksklusif D'ROSE dengan hasil lukisan tangan.
-- Harga bergantung kepada material dan koleksi.$$,
-  $$Product Name: Kain Pasang Batik 4 Meter
-Brand: D'ROSE Batik
-Length: 4 meters
-Category: Women's batik fabric
-Material: Depends on collection, e.g. Crepe Silk and Cotton Viscose.
-Design: Hand-drawn batik.
-
-Features:
-- 4-meter fabric length.
-- Suitable for baju kurung, kebaya, dresses, or custom designs.
-- Various colors and patterns available.
-- Most designs only have a single piece available.
-- Exclusive D'ROSE hand-drawn design.
-- Price depends on material and collection.$$,
+Ciri-ciri / Features:
+- Panjang kain 4 meter. / 4-meter fabric length.
+- Sesuai dibuat baju kurung, kebaya, dress atau rekaan mengikut citarasa pelanggan. / Suitable for baju kurung, kebaya, dresses, or custom designs.
+- Terdapat pelbagai pilihan warna dan corak. / Various colors and patterns available.
+- Kebanyakan design hanya satu helai. / Most designs only have a single piece available.
+- Rekaan eksklusif D'ROSE dengan hasil lukisan tangan. / Exclusive D'ROSE hand-drawn design.
+- Harga bergantung kepada material dan koleksi. / Price depends on material and collection.$$,
   true
 ),
 (
   'product_kaftan_lovelies',
-  'Ada kaftan?',
+  'kaftan,lovelies,kaftan cotton',
   'TODO: confirm with owner -- Kaftan Cotton Lovelies copy pending (spec Section 4.1 note). Not yet marked active.',
-  'TODO: confirm with owner -- Kaftan Cotton Lovelies copy pending.',
   false
-);
+)
+on conflict (topic) do update set keywords = excluded.keywords, content = excluded.content, is_active = excluded.is_active;
 
 -- Non-product topics (spec Section 4.3) -- all pending owner confirmation.
-insert into knowledge_base (topic, question, answer_ms, answer_en, is_active) values
-('shipping', 'Boleh hantar ke seluruh Malaysia?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('payment_methods', 'Macam mana nak bayar?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('returns', 'Boleh tukar kalau tak muat?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('how_to_order', 'Macam mana nak order?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('brand_story', 'Ni brand apa?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('delivery_time', 'Berapa lama sampai?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false),
-('custom_orders', 'Boleh order custom?', '[TODO: confirm with owner]', '[TODO: confirm with owner]', false);
+insert into knowledge_base (topic, keywords, content, is_active) values
+('shipping', 'hantar,shipping,delivery,poslaju,penghantaran', '[TODO: confirm with owner]', false),
+('payment_methods', 'bayar,payment,bank transfer,tng,ewallet,duitnow', '[TODO: confirm with owner]', false),
+('returns', 'tukar,return,exchange,refund,pulang', '[TODO: confirm with owner]', false),
+('how_to_order', 'order,macam mana nak order,how to order,cara order', '[TODO: confirm with owner]', false),
+('brand_story', 'brand,cerita,history,tentang,about', '[TODO: confirm with owner]', false),
+('delivery_time', 'berapa lama,how long,delivery time,tempoh', '[TODO: confirm with owner]', false),
+('custom_orders', 'custom,tempahan khas,customize', '[TODO: confirm with owner]', false)
+on conflict (topic) do update set keywords = excluded.keywords, content = excluded.content, is_active = excluded.is_active;
