@@ -1,9 +1,16 @@
 'use client';
 
 import { use, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { backendApi } from '@/lib/api';
 import { Conversation, Message } from '@/lib/types';
+
+const STATUS_LABELS: Record<Conversation['status'], string> = {
+  ai_active: 'AI is handling this chat',
+  awaiting_staff: 'Awaiting staff -- customer gave qualifying details',
+  staff_handling: 'You are handling this chat',
+};
 
 export default function ConversationPage({
   params,
@@ -11,6 +18,7 @@ export default function ConversationPage({
   params: Promise<{ conversationId: string }>;
 }) {
   const { conversationId } = use(params);
+  const router = useRouter();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,6 +26,8 @@ export default function ConversationPage({
   const [sending, setSending] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
   const [followUpText, setFollowUpText] = useState('');
+  const [phoneCopied, setPhoneCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,6 +108,25 @@ export default function ConversationPage({
     await backendApi.handback(conversationId);
   }
 
+  async function handleCopyPhone() {
+    if (!conversation) return;
+    await navigator.clipboard.writeText(conversation.customer_phone);
+    setPhoneCopied(true);
+    setTimeout(() => setPhoneCopied(false), 1500);
+  }
+
+  async function handleDelete() {
+    if (!confirm('Delete this conversation and its entire message history? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await backendApi.deleteConversation(conversationId);
+      router.push('/dashboard');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete conversation');
+      setDeleting(false);
+    }
+  }
+
   async function handleToggleFollowUp() {
     if (!conversation) return;
     await backendApi.toggleFollowUp(conversationId, !conversation.follow_up_enabled);
@@ -114,7 +143,8 @@ export default function ConversationPage({
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] flex-col sm:h-screen">
+    <div className="flex h-[calc(100vh-7rem)] sm:h-screen">
+    <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
         <div>
           <h1 className="text-sm font-semibold text-neutral-900">
@@ -226,6 +256,55 @@ export default function ConversationPage({
           </button>
         </div>
       </div>
+    </div>
+
+      <aside className="hidden w-72 shrink-0 flex-col border-l border-neutral-200 bg-white p-4 lg:flex">
+        <div className="mb-4 flex flex-col items-center text-center">
+          <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-neutral-200 text-lg font-semibold text-neutral-600">
+            {(conversation.customer_name || conversation.customer_phone).charAt(0).toUpperCase()}
+          </div>
+          <p className="text-sm font-semibold text-neutral-900">
+            {conversation.customer_name || 'Unknown'}
+          </p>
+        </div>
+
+        <div className="mb-4 flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-xs">
+          <span className="text-neutral-600">{conversation.customer_phone}</span>
+          <button
+            onClick={handleCopyPhone}
+            className="shrink-0 rounded-md border border-neutral-300 bg-white px-2 py-1 text-neutral-600 hover:bg-neutral-100"
+          >
+            {phoneCopied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-md border border-neutral-200 p-3">
+          <p className="mb-2 text-xs text-neutral-600">{STATUS_LABELS[conversation.status]}</p>
+          {conversation.status === 'ai_active' ? (
+            <button
+              onClick={handleTakeOver}
+              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+            >
+              Take over
+            </button>
+          ) : (
+            <button
+              onClick={handleHandback}
+              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+            >
+              Pass Back to AI
+            </button>
+          )}
+        </div>
+
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="mt-auto text-xs text-red-600 hover:underline disabled:opacity-50"
+        >
+          {deleting ? 'Deleting…' : 'Delete conversation'}
+        </button>
+      </aside>
     </div>
   );
 }

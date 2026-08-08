@@ -228,6 +228,38 @@ staffRouter.post('/follow-up/custom', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Permanently removes a conversation and its history -- schema has no cascade
+// delete on messages/follow_up_log/token_usage, so those are cleared first to
+// avoid a foreign-key violation on the conversations row itself.
+staffRouter.delete('/conversations/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { error: msgErr } = await supabase.from('messages').delete().eq('conversation_id', id);
+  if (msgErr) {
+    res.status(500).json({ error: msgErr.message });
+    return;
+  }
+
+  const { error: followUpErr } = await supabase.from('follow_up_log').delete().eq('conversation_id', id);
+  if (followUpErr) {
+    res.status(500).json({ error: followUpErr.message });
+    return;
+  }
+
+  const { error: tokenErr } = await supabase.from('token_usage').delete().eq('conversation_id', id);
+  if (tokenErr) {
+    res.status(500).json({ error: tokenErr.message });
+    return;
+  }
+
+  const { error } = await supabase.from('conversations').delete().eq('id', id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ ok: true });
+});
+
 // Staff CRUD (also available via settings.ts; kept here for convenience from
 // the conversation-facing part of the dashboard).
 staffRouter.get('/', async (_req, res) => {
