@@ -101,7 +101,17 @@ export default function SettingsPage() {
   async function handleSaveLlm() {
     setSavingLlm(true);
     try {
-      const updates = Object.fromEntries(Object.entries(llmDraft).filter(([, v]) => v));
+      // The OpenAI model dropdown always shows a resolved value (falls back to
+      // gpt-4o-mini for display) even when the user hasn't touched it, so its
+      // choice must always be sent explicitly -- otherwise leaving it on the
+      // default visual selection silently saves nothing and any previously
+      // stored (possibly invalid) override is left in place untouched.
+      const resolvedModel =
+        llmDraft.llm_provider === 'openai' ? llmDraft.llm_model || 'gpt-4o-mini' : llmDraft.llm_model;
+      const updates: Record<string, string> = {
+        ...Object.fromEntries(Object.entries(llmDraft).filter(([key, v]) => v && key !== 'llm_model')),
+        ...(resolvedModel ? { llm_model: resolvedModel } : {}),
+      };
       if (Object.keys(updates).length === 0) return;
       await backendApi.updateLlmSettings(updates);
       setLlmDraft({ llm_provider: llmDraft.llm_provider, llm_api_key: '', llm_model: '' });
