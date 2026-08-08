@@ -28,6 +28,7 @@ export default function ConversationPage({
   const [followUpText, setFollowUpText] = useState('');
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,33 +146,73 @@ export default function ConversationPage({
   return (
     <div className="flex h-[calc(100vh-7rem)] sm:h-screen">
     <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
+      <header className="relative flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
         <div>
           <h1 className="text-sm font-semibold text-neutral-900">
             {conversation.customer_name || conversation.customer_phone}
           </h1>
-          <p className="text-xs text-neutral-500">{conversation.customer_phone}</p>
+          <p className="text-xs text-neutral-500 lg:hidden">{STATUS_LABELS[conversation.status]}</p>
+          <p className="hidden text-xs text-neutral-500 lg:block">{conversation.customer_phone}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
-            {conversation.status}
-          </span>
-          {conversation.status === 'ai_active' ? (
+
+        {/* Desktop: actions live in the sidebar, just a quick-glance status badge here. */}
+        <span className="hidden rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700 lg:inline">
+          {conversation.status}
+        </span>
+
+        {/* Mobile: no room for a persistent sidebar, so the same actions live behind one menu button. */}
+        <button
+          onClick={() => setMobileMenuOpen((v) => !v)}
+          className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm hover:bg-neutral-50 lg:hidden"
+          aria-label="Conversation actions"
+        >
+          ⋮
+        </button>
+
+        {mobileMenuOpen && (
+          <div className="absolute right-4 top-full z-10 mt-1 w-64 rounded-md border border-neutral-200 bg-white p-3 shadow-lg lg:hidden">
+            <div className="mb-3 flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-xs">
+              <span className="text-neutral-600">{conversation.customer_phone}</span>
+              <button
+                onClick={handleCopyPhone}
+                className="shrink-0 rounded-md border border-neutral-300 bg-white px-2 py-1 text-neutral-600 hover:bg-neutral-100"
+              >
+                {phoneCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            {conversation.status === 'ai_active' ? (
+              <button
+                onClick={() => {
+                  handleTakeOver();
+                  setMobileMenuOpen(false);
+                }}
+                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+              >
+                Take over
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  handleHandback();
+                  setMobileMenuOpen(false);
+                }}
+                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+              >
+                Pass Back to AI
+              </button>
+            )}
             <button
-              onClick={handleTakeOver}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handleDelete();
+              }}
+              disabled={deleting}
+              className="w-full text-left text-xs text-red-600 hover:underline disabled:opacity-50"
             >
-              Take over
+              {deleting ? 'Deleting…' : 'Delete conversation'}
             </button>
-          ) : (
-            <button
-              onClick={handleHandback}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
-            >
-              Hand back to AI
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
