@@ -11,8 +11,11 @@ const HISTORY_LIMIT = 20;
 // + API key are entered by the owner via the dashboard Settings page (stored
 // in `app_settings`, same pattern as WhatsApp credentials) so each client can
 // bring their own key rather than it being hardcoded per deploy.
+//
+// Groq deprecated llama-3.3-70b-versatile on 2026-06-17 (full shutdown
+// 2026-08-16) -- gpt-oss-120b is Groq's own recommended migration target.
 const PROVIDER_DEFAULTS = {
-  groq: { baseURL: 'https://api.groq.com/openai/v1', defaultModel: 'llama-3.3-70b-versatile' },
+  groq: { baseURL: 'https://api.groq.com/openai/v1', defaultModel: 'openai/gpt-oss-120b' },
   openai: { baseURL: undefined, defaultModel: 'gpt-4o-mini' },
 } as const;
 

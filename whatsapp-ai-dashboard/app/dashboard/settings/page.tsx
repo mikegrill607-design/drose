@@ -8,7 +8,7 @@ import { StaffRow } from '@/lib/types';
 // to show the owner what model is actually active when they've left the
 // override blank; the backend is the source of truth for what's really sent.
 const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
-  groq: 'llama-3.3-70b-versatile',
+  groq: 'openai/gpt-oss-120b',
   openai: 'gpt-4o-mini',
 };
 
@@ -231,7 +231,7 @@ export default function SettingsPage() {
               onChange={(e) => setLlmDraft({ ...llmDraft, llm_provider: e.target.value })}
               className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
             >
-              <option value="groq">Groq (Llama 3.3 70B)</option>
+              <option value="groq">Groq (fast/cheap, default)</option>
               <option value="openai">OpenAI</option>
             </select>
           </div>
