@@ -163,7 +163,7 @@ export default function ConversationPage({
         {/* Mobile: no room for a persistent sidebar, so the same actions live behind one menu button. */}
         <button
           onClick={() => setMobileMenuOpen((v) => !v)}
-          className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm hover:bg-neutral-50 lg:hidden"
+          className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 lg:hidden"
           aria-label="Conversation actions"
         >
           ⋮
@@ -186,7 +186,7 @@ export default function ConversationPage({
                   handleTakeOver();
                   setMobileMenuOpen(false);
                 }}
-                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
               >
                 Take over
               </button>
@@ -196,7 +196,7 @@ export default function ConversationPage({
                   handleHandback();
                   setMobileMenuOpen(false);
                 }}
-                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                className="mb-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
               >
                 Pass Back to AI
               </button>
@@ -254,7 +254,7 @@ export default function ConversationPage({
             onClick={() => fileInputRef.current?.click()}
             disabled={sendingImage}
             title="Send a catalog photo"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
           >
             {sendingImage ? '…' : '📷'}
           </button>
@@ -291,7 +291,7 @@ export default function ConversationPage({
           />
           <button
             onClick={handleSendFollowUp}
-            className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-50"
+            className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
           >
             Send now
           </button>
@@ -324,14 +324,14 @@ export default function ConversationPage({
           {conversation.status === 'ai_active' ? (
             <button
               onClick={handleTakeOver}
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
             >
               Take over
             </button>
           ) : (
             <button
               onClick={handleHandback}
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
             >
               Pass Back to AI
             </button>

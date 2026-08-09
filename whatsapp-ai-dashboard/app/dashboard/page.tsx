@@ -185,7 +185,7 @@ export default function ConversationListPage() {
                       <button
                         onClick={() => handleTakeOver(c.id)}
                         disabled={busyConvId === c.id}
-                        className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
+                        className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
                         title="Jump in yourself -- the AI stops replying to this customer immediately"
                       >
                         Take over
@@ -194,7 +194,7 @@ export default function ConversationListPage() {
                       <button
                         onClick={() => handleHandback(c.id)}
                         disabled={busyConvId === c.id}
-                        className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
+                        className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
                         title="Let the AI resume replying to this customer"
                       >
                         Hand back to AI
