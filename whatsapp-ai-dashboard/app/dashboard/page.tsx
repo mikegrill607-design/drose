@@ -150,62 +150,102 @@ export default function ConversationListPage() {
       ) : conversations.length === 0 ? (
         <p className="text-sm text-neutral-500">No conversations yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-neutral-500">
-              <tr>
-                <th className="px-4 py-2 font-medium">Customer</th>
-                <th className="px-4 py-2 font-medium">Phone</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Last message</th>
-                <th className="px-4 py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {conversations.map((c) => (
-                <tr key={c.id} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50">
-                  <td className="px-4 py-2">
-                    <Link href={`/dashboard/${c.id}`} className="font-medium text-neutral-900 hover:underline">
-                      {c.customer_name || 'Unknown'}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-neutral-600">{c.customer_phone}</td>
-                  <td className="px-4 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[c.status]}`}>
-                      {STATUS_LABELS[c.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-neutral-500">
-                    {c.last_customer_message_at
-                      ? new Date(c.last_customer_message_at).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    {c.status === 'ai_active' ? (
-                      <button
-                        onClick={() => handleTakeOver(c.id)}
-                        disabled={busyConvId === c.id}
-                        className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-                        title="Jump in yourself -- the AI stops replying to this customer immediately"
-                      >
-                        Take over
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleHandback(c.id)}
-                        disabled={busyConvId === c.id}
-                        className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-                        title="Let the AI resume replying to this customer"
-                      >
-                        Hand back to AI
-                      </button>
-                    )}
-                  </td>
+        <>
+          {/* Mobile: cards, no horizontal scroll -- everything needed fits in one glance. */}
+          <div className="space-y-2 sm:hidden">
+            {conversations.map((c) => (
+              <div key={c.id} className="rounded-lg border border-neutral-200 bg-white p-3">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <Link href={`/dashboard/${c.id}`} className="font-medium text-neutral-900 hover:underline">
+                    {c.customer_name || 'Unknown'}
+                  </Link>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[c.status]}`}>
+                    {STATUS_LABELS[c.status]}
+                  </span>
+                </div>
+                <p className="mb-2 text-xs text-neutral-500">
+                  {c.customer_phone} ·{' '}
+                  {c.last_customer_message_at ? new Date(c.last_customer_message_at).toLocaleString() : '—'}
+                </p>
+                {c.status === 'ai_active' ? (
+                  <button
+                    onClick={() => handleTakeOver(c.id)}
+                    disabled={busyConvId === c.id}
+                    className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                  >
+                    Take over
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleHandback(c.id)}
+                    disabled={busyConvId === c.id}
+                    className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                  >
+                    Hand back to AI
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: full table. */}
+          <div className="hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white sm:block">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-neutral-500">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Customer</th>
+                  <th className="px-4 py-2 font-medium">Phone</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Last message</th>
+                  <th className="px-4 py-2 font-medium"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {conversations.map((c) => (
+                  <tr key={c.id} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50">
+                    <td className="px-4 py-2">
+                      <Link href={`/dashboard/${c.id}`} className="font-medium text-neutral-900 hover:underline">
+                        {c.customer_name || 'Unknown'}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-neutral-600">{c.customer_phone}</td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[c.status]}`}>
+                        {STATUS_LABELS[c.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-neutral-500">
+                      {c.last_customer_message_at
+                        ? new Date(c.last_customer_message_at).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {c.status === 'ai_active' ? (
+                        <button
+                          onClick={() => handleTakeOver(c.id)}
+                          disabled={busyConvId === c.id}
+                          className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                          title="Jump in yourself -- the AI stops replying to this customer immediately"
+                        >
+                          Take over
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleHandback(c.id)}
+                          disabled={busyConvId === c.id}
+                          className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                          title="Let the AI resume replying to this customer"
+                        >
+                          Hand back to AI
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

@@ -274,7 +274,9 @@ export default function ConversationPage({
           </button>
         </div>
 
-        <div className="mt-3 flex items-center gap-3 border-t border-neutral-100 pt-3">
+        {/* Follow-up scheduling isn't part of the on-the-go mobile workflow
+            (monitor chats + send catalog photos) -- desktop only. */}
+        <div className="mt-3 hidden items-center gap-3 border-t border-neutral-100 pt-3 lg:flex">
           <label className="flex items-center gap-2 text-xs text-neutral-600">
             <input
               type="checkbox"
