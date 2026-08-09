@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { backendApi } from '@/lib/api';
 import { Conversation } from '@/lib/types';
@@ -61,6 +62,7 @@ async function loadStats(): Promise<Stats> {
 }
 
 export default function ConversationListPage() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -154,11 +156,13 @@ export default function ConversationListPage() {
           {/* Mobile: cards, no horizontal scroll -- everything needed fits in one glance. */}
           <div className="space-y-2 sm:hidden">
             {conversations.map((c) => (
-              <div key={c.id} className="rounded-lg border border-neutral-200 bg-white p-3">
+              <div
+                key={c.id}
+                onClick={() => router.push(`/dashboard/${c.id}`)}
+                className="cursor-pointer rounded-lg border border-neutral-200 bg-white p-3 active:bg-neutral-50"
+              >
                 <div className="mb-1 flex items-start justify-between gap-2">
-                  <Link href={`/dashboard/${c.id}`} className="font-medium text-neutral-900 hover:underline">
-                    {c.customer_name || 'Unknown'}
-                  </Link>
+                  <span className="font-medium text-neutral-900">{c.customer_name || 'Unknown'}</span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[c.status]}`}>
                     {STATUS_LABELS[c.status]}
                   </span>
@@ -169,7 +173,10 @@ export default function ConversationListPage() {
                 </p>
                 {c.status === 'ai_active' ? (
                   <button
-                    onClick={() => handleTakeOver(c.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTakeOver(c.id);
+                    }}
                     disabled={busyConvId === c.id}
                     className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
                   >
@@ -177,7 +184,10 @@ export default function ConversationListPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => handleHandback(c.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleHandback(c.id);
+                    }}
                     disabled={busyConvId === c.id}
                     className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
                   >
