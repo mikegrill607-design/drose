@@ -27,36 +27,34 @@ interface Stats {
   aiSuccessRate: number | null; // null when there's no data yet
 }
 
+interface DashboardStatsRow {
+  messages_received: number;
+  ai_messages_sent: number;
+  staff_messages_sent: number;
+  total_tokens: number;
+  total_conversations: number;
+  staff_handled_conversations: number;
+}
+
+// Single round trip (db/migrations/003_dashboard_stats_rpc.sql) instead of 6
+// separate queries -- one of which used to fetch every token_usage row just
+// to sum it client-side.
 async function loadStats(): Promise<Stats> {
   const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc('get_dashboard_stats').single();
+  if (error) throw error;
 
-  const [customerCount, aiCount, staffCount, tokenRows, conversationCount, staffHandledConvIds] =
-    await Promise.all([
-      supabase.from('messages').select('*', { count: 'exact', head: true }).eq('sender', 'customer'),
-      supabase.from('messages').select('*', { count: 'exact', head: true }).eq('sender', 'ai'),
-      supabase.from('messages').select('*', { count: 'exact', head: true }).eq('sender', 'staff'),
-      supabase.from('token_usage').select('total_tokens'),
-      supabase.from('conversations').select('*', { count: 'exact', head: true }),
-      supabase.from('messages').select('conversation_id').eq('sender', 'staff'),
-    ]);
-
-  const totalTokens = (tokenRows.data ?? []).reduce(
-    (sum: number, r: { total_tokens: number }) => sum + r.total_tokens,
-    0
-  );
-
-  const totalConversations = conversationCount.count ?? 0;
-  const staffHandledSet = new Set(
-    (staffHandledConvIds.data ?? []).map((r: { conversation_id: string }) => r.conversation_id)
-  );
+  const row = data as DashboardStatsRow;
   const aiSuccessRate =
-    totalConversations === 0 ? null : (totalConversations - staffHandledSet.size) / totalConversations;
+    row.total_conversations === 0
+      ? null
+      : (row.total_conversations - row.staff_handled_conversations) / row.total_conversations;
 
   return {
-    messagesReceived: customerCount.count ?? 0,
-    aiMessagesSent: aiCount.count ?? 0,
-    staffMessagesSent: staffCount.count ?? 0,
-    totalTokens,
+    messagesReceived: row.messages_received,
+    aiMessagesSent: row.ai_messages_sent,
+    staffMessagesSent: row.staff_messages_sent,
+    totalTokens: row.total_tokens,
     aiSuccessRate,
   };
 }
