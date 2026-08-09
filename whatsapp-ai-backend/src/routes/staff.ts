@@ -5,6 +5,7 @@ import { sendWhatsAppMessage, sendWhatsAppImage } from '../lib/whatsapp';
 import { uploadChatMedia } from '../lib/chatMedia';
 import { generateAiReply } from '../lib/ai';
 import { detectLanguage } from '../lib/language';
+import { expensiveLimiter } from '../lib/rateLimiters';
 import { MessageSender } from '../types';
 
 export const staffRouter = Router();
@@ -27,7 +28,7 @@ const upload = multer({
 // before going live. Token usage is still logged (it's a real LLM call and
 // costs real money) but with conversation_id = null so it doesn't pollute any
 // customer's per-conversation breakdown on the Usage page.
-staffRouter.post('/test-ai', async (req, res) => {
+staffRouter.post('/test-ai', expensiveLimiter, async (req, res) => {
   const { messages } = req.body ?? {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: 'messages (non-empty array) is required' });

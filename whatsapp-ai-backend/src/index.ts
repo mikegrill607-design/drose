@@ -11,8 +11,15 @@ import { startFollowUpCron } from './cron/followUp';
 import { startTemplateStatusCron } from './cron/templateStatus';
 import { requireStaffAuth } from './lib/requireStaffAuth';
 import { ensureChatMediaBucket } from './lib/chatMedia';
+import { webhookLimiter, apiLimiter } from './lib/rateLimiters';
 
 const app = express();
+// Railway sits in front of this app as a reverse proxy -- without this,
+// express-rate-limit (and req.ip generally) would see Railway's proxy hop
+// instead of the real client IP, either lumping all traffic together or
+// being trivially bypassable. Trusting exactly one hop matches Railway's
+// setup (single edge proxy in front of the app).
+app.set('trust proxy', 1);
 // Auth here is a Bearer token the frontend sets explicitly (not an
 // auto-attached cookie), so a wide-open CORS policy isn't a classic CSRF
 // risk -- but restricting it to the dashboard's own domains is still cheap
@@ -43,14 +50,14 @@ app.use(
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Meta calls this directly (no browser, no session) -- must stay open.
-app.use('/webhook', webhookRouter);
+app.use('/webhook', webhookLimiter, webhookRouter);
 
 // Everything else is dashboard-only: require a valid Supabase staff session.
-app.use('/staff', requireStaffAuth, staffRouter);
-app.use('/kb', requireStaffAuth, kbRouter);
-app.use('/system-prompt', requireStaffAuth, systemPromptRouter);
-app.use('/settings', requireStaffAuth, settingsRouter);
-app.use('/templates', requireStaffAuth, templatesRouter);
+app.use('/staff', apiLimiter, requireStaffAuth, staffRouter);
+app.use('/kb', apiLimiter, requireStaffAuth, kbRouter);
+app.use('/system-prompt', apiLimiter, requireStaffAuth, systemPromptRouter);
+app.use('/settings', apiLimiter, requireStaffAuth, settingsRouter);
+app.use('/templates', apiLimiter, requireStaffAuth, templatesRouter);
 
 ensureChatMediaBucket();
 startFollowUpCron();
