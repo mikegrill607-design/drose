@@ -70,4 +70,8 @@ export type AppSettingKey =
   | 'followup_day3_template_ms'
   | 'followup_day3_template_en'
   | 'followup_day7_template_ms'
-  | 'followup_day7_template_en';
+  | 'followup_day7_template_en'
+  // Google Apps Script Web App URL -- each qualified lead (handoff trigger)
+  // gets POSTed here so it lands as a row in the owner's own Google Sheet.
+  // See src/lib/googleSheets.ts.
+  | 'google_sheets_webhook_url';

@@ -7,6 +7,7 @@ import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { checkQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
+import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { generateAiReply } from '../lib/ai';
 import { Conversation, KnowledgeBaseEntry, Message } from '../types';
 
@@ -147,6 +148,13 @@ webhookRouter.post('/', async (req, res) => {
         : 'Unknown -- see message below';
 
       await handoffToStaff(conversation, productGuess, intent.matchedDetails, text);
+      await sendLeadToGoogleSheets({
+        customerName: conversation.customer_name,
+        customerPhone: conversation.customer_phone,
+        product: productGuess,
+        details: intent.matchedDetails.join(', '),
+        lastMessage: text,
+      });
       return;
     }
 

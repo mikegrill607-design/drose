@@ -12,6 +12,31 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   openai: 'gpt-4o-mini',
 };
 
+// Pasted by the owner into Extensions -> Apps Script on their own Google
+// Sheet, then deployed as a Web App -- that URL is what goes in the field
+// below. Keeps this integration to "paste a URL", no Google Cloud project
+// or API key needed.
+const APPS_SCRIPT_SNIPPET = `function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Customer Name', 'Phone', 'Product', 'Details', 'Last Message']);
+  }
+
+  sheet.appendRow([
+    data.timestamp,
+    data.customerName,
+    data.customerPhone,
+    data.product,
+    data.details,
+    data.lastMessage,
+  ]);
+
+  return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
 export default function SettingsPage() {
   const [waSettings, setWaSettings] = useState<Record<string, string>>({});
   const [waDraft, setWaDraft] = useState({
@@ -31,6 +56,12 @@ export default function SettingsPage() {
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffNumber, setNewStaffNumber] = useState('');
+  const [googleSettings, setGoogleSettings] = useState<Record<string, string>>({});
+  const [googleDraft, setGoogleDraft] = useState('');
+  const [savingGoogle, setSavingGoogle] = useState(false);
+  const [testingGoogle, setTestingGoogle] = useState(false);
+  const [googleTestResult, setGoogleTestResult] = useState<'ok' | 'error' | null>(null);
+  const [copiedScript, setCopiedScript] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,15 +70,17 @@ export default function SettingsPage() {
   async function loadAll() {
     setLoadError(null);
     try {
-      const [wa, llm, staffList] = await Promise.all([
+      const [wa, llm, staffList, google] = await Promise.all([
         backendApi.getWhatsAppSettings(),
         backendApi.getLlmSettings(),
         backendApi.getStaff(),
+        backendApi.getGoogleSettings(),
       ]);
       setWaSettings(wa);
       setLlmSettings(llm);
       setLlmDraft((prev) => ({ ...prev, llm_provider: llm.llm_provider || 'groq' }));
       setStaff(staffList ?? []);
+      setGoogleSettings(google);
     } catch (err) {
       // Never leave the page stuck on "Loading..." -- show what broke instead.
       setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -119,6 +152,38 @@ export default function SettingsPage() {
     } finally {
       setSavingLlm(false);
     }
+  }
+
+  async function handleSaveGoogle() {
+    if (!googleDraft) return;
+    setSavingGoogle(true);
+    setGoogleTestResult(null);
+    try {
+      await backendApi.updateGoogleSettings({ google_sheets_webhook_url: googleDraft });
+      setGoogleDraft('');
+      await loadAll();
+    } finally {
+      setSavingGoogle(false);
+    }
+  }
+
+  async function handleTestGoogle() {
+    setTestingGoogle(true);
+    setGoogleTestResult(null);
+    try {
+      await backendApi.testGoogleSheets();
+      setGoogleTestResult('ok');
+    } catch {
+      setGoogleTestResult('error');
+    } finally {
+      setTestingGoogle(false);
+    }
+  }
+
+  async function handleCopyScript() {
+    await navigator.clipboard.writeText(APPS_SCRIPT_SNIPPET);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 1500);
   }
 
   async function handleAddStaff() {
@@ -292,6 +357,87 @@ export default function SettingsPage() {
         >
           {savingLlm ? 'Saving…' : 'Save AI settings'}
         </button>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-800">Google Sheets (Leads)</h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Every qualified lead (a handoff to staff) gets added as a new row in your own Google Sheet
+          automatically. No Google account connection needed on our side -- you paste one URL from your own
+          Google Sheet.
+        </p>
+
+        <ol className="mb-3 list-decimal space-y-1.5 pl-4 text-xs text-neutral-600">
+          <li>
+            Open (or create) the Google Sheet you want leads to land in, then go to{' '}
+            <span className="font-medium text-neutral-800">Extensions → Apps Script</span>.
+          </li>
+          <li>Delete anything in the editor and paste this in its place:</li>
+        </ol>
+
+        <div className="mb-3 rounded-md bg-neutral-900 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-400">Apps Script code</span>
+            <button
+              onClick={handleCopyScript}
+              className="rounded-md border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-300 hover:bg-neutral-800"
+            >
+              {copiedScript ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <pre className="overflow-x-auto text-[11px] leading-relaxed text-neutral-100">
+            <code>{APPS_SCRIPT_SNIPPET}</code>
+          </pre>
+        </div>
+
+        <ol start={3} className="mb-3 list-decimal space-y-1.5 pl-4 text-xs text-neutral-600">
+          <li>
+            Click <span className="font-medium text-neutral-800">Deploy → New deployment</span>, choose type{' '}
+            <span className="font-medium text-neutral-800">Web app</span>.
+          </li>
+          <li>
+            Set <span className="font-medium text-neutral-800">Execute as: Me</span> and{' '}
+            <span className="font-medium text-neutral-800">Who has access: Anyone</span>, then Deploy.
+          </li>
+          <li>
+            Authorize it when Google prompts you (it&apos;s your own script), then copy the{' '}
+            <span className="font-medium text-neutral-800">Web app URL</span> it gives you and paste it below.
+          </li>
+        </ol>
+
+        <div className="space-y-3">
+          <Field
+            label={`Apps Script Web App URL ${googleSettings.google_sheets_webhook_url ? `(current: ${googleSettings.google_sheets_webhook_url})` : '(not connected)'}`}
+            value={googleDraft}
+            onChange={setGoogleDraft}
+            placeholder="https://script.google.com/macros/s/.../exec"
+          />
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleSaveGoogle}
+            disabled={savingGoogle || !googleDraft}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+          >
+            {savingGoogle ? 'Saving…' : 'Save Google Sheets URL'}
+          </button>
+          {googleSettings.google_sheets_webhook_url && (
+            <button
+              onClick={handleTestGoogle}
+              disabled={testingGoogle}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            >
+              {testingGoogle ? 'Sending test row…' : 'Test connection'}
+            </button>
+          )}
+          {googleTestResult === 'ok' && (
+            <span className="text-xs text-green-600">Test row sent -- check your sheet.</span>
+          )}
+          {googleTestResult === 'error' && (
+            <span className="text-xs text-red-600">Test failed -- check the URL and deployment access.</span>
+          )}
+        </div>
       </section>
 
       <section className="rounded-lg border border-neutral-200 bg-white p-4">

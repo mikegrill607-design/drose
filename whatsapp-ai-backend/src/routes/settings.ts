@@ -2,7 +2,10 @@ import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { invalidateAppSettingsCache } from '../lib/appSettings';
+import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { AppSettingKey } from '../types';
+
+const GOOGLE_KEYS: AppSettingKey[] = ['google_sheets_webhook_url'];
 
 // Which approved template to use for each Day 1/3/7 stage, per language.
 const FOLLOW_UP_TEMPLATE_KEYS: AppSettingKey[] = [
@@ -181,6 +184,45 @@ settingsRouter.put('/followup', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
+  }
+});
+
+// Google Sheets lead export -- a Google Apps Script Web App URL the owner
+// sets up themselves (Settings page has the exact script to paste + deploy
+// steps). No Google Cloud project or API key needed on our side.
+settingsRouter.get('/google', async (_req, res) => {
+  try {
+    const values = await fetchSettings(GOOGLE_KEYS);
+    res.json(values);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to load settings' });
+  }
+});
+
+settingsRouter.put('/google', async (req, res) => {
+  const { staffId, ...updates } = req.body ?? {};
+  try {
+    await upsertSettings(updates, GOOGLE_KEYS, staffId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
+  }
+});
+
+// Lets staff confirm their Apps Script deployment actually works before
+// relying on it -- sends one obviously-fake row.
+settingsRouter.post('/google/test', async (_req, res) => {
+  try {
+    await sendLeadToGoogleSheets({
+      customerName: 'Test Lead',
+      customerPhone: '+60000000000',
+      product: 'Test product',
+      details: 'This is a test row from Drose Batik Settings',
+      lastMessage: 'Test message -- safe to delete this row',
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to send test row' });
   }
 });
 
