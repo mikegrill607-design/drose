@@ -6,8 +6,9 @@ import { sendWhatsAppMessage, downloadWhatsAppMedia } from '../lib/whatsapp';
 import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { checkQualifyingCombo } from '../lib/intent';
+import { selectRelevantKb } from '../lib/kbRouter';
 import { generateAiReply } from '../lib/ai';
-import { Conversation, Message } from '../types';
+import { Conversation, KnowledgeBaseEntry, Message } from '../types';
 
 export const webhookRouter = Router();
 
@@ -133,7 +134,17 @@ webhookRouter.post('/', async (req, res) => {
         wa_message_id: sentId,
       });
 
-      await handoffToStaff(conversation, intent.matchedProduct!, intent.matchedDetails, text);
+      // intent.ts is generic across every product (not hardcoded per name),
+      // so it can't say WHICH product this handoff is about -- reuse the
+      // same KB keyword router that picks AI reply context to guess it.
+      const { data: kbEntries } = await supabase
+        .from('knowledge_base')
+        .select('topic, content, keywords')
+        .eq('is_active', true);
+      const [topMatch] = selectRelevantKb((kbEntries ?? []) as KnowledgeBaseEntry[], customerMessages);
+      const productGuess = topMatch?.topic ?? 'Unknown -- see message below';
+
+      await handoffToStaff(conversation, productGuess, intent.matchedDetails, text);
       return;
     }
 

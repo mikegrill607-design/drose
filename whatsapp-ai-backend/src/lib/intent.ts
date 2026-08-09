@@ -1,71 +1,52 @@
 import { Message } from '../types';
 
 /**
- * Handoff trigger = customer has given the FULL qualifying combo needed to
+ * Handoff trigger = customer has given a full qualifying combo needed to
  * search real stock (spec Section 4.2/6) -- not a single keyword like
- * "price" or "size" mentioned in passing. Each product defines the slots
- * that must ALL be filled (from any customer message in the conversation,
- * not just the latest one) before we flip to `awaiting_staff`.
- *
- * TODO: confirm exact qualifying slots per product with the owner --
- * Kaftan Cotton Lovelies copy (and its slots) is still pending (spec 4.1 note).
+ * "price" or "size" mentioned in passing. Generic across every product in
+ * the Knowledge Base (not hardcoded per product name) -- a size/fit detail
+ * PLUS a variant detail (color or material), given anywhere across the
+ * conversation's customer messages, is what search-real-stock requests
+ * actually look like for this catalog (sleeve+size for shirts, color+material
+ * for fabric/kaftan, etc.). Which specific product it's about is inferred
+ * separately in webhook.ts via the same KB keyword router used for AI
+ * replies, not tracked here.
  */
-interface ProductSlotConfig {
-  product: string;
-  slots: {
-    name: string;
-    patterns: RegExp[];
-  }[];
-}
+const SIZE_OR_FIT_PATTERNS: RegExp[] = [
+  /\b(xs|s|m|l|xl|xxl|xxxl)\b/i,
+  /\bsaiz\s*\w+/i,
+  /short\s*sleeve/i,
+  /long\s*sleeve/i,
+  /lengan\s*pendek/i,
+  /lengan\s*panjang/i,
+];
 
-const PRODUCT_CONFIGS: ProductSlotConfig[] = [
-  {
-    product: 'Kemeja Batik Cotton DanielRose',
-    slots: [
-      { name: 'sleeve_type', patterns: [/short\s*sleeve/i, /long\s*sleeve/i, /lengan\s*pendek/i, /lengan\s*panjang/i] },
-      { name: 'size', patterns: [/\b(xs|s|m|l|xl|xxl|xxxl)\b/i, /\bsaiz\s*\w+/i] },
-    ],
-  },
-  {
-    product: 'Kain Pasang Batik 4 Meter',
-    slots: [
-      { name: 'material', patterns: [/crepe\s*silk/i, /cotton\s*viscose/i, /\bmaterial\b/i, /\bbahan\b/i] },
-      { name: 'color', patterns: [/\bwarna\s*\w+/i, /\b(red|blue|green|black|white|merah|biru|hijau|hitam|putih|pastel)\b/i] },
-    ],
-  },
+const VARIANT_PATTERNS: RegExp[] = [
+  /\bwarna\s*\w+/i,
+  /\b(red|blue|green|black|white|merah|biru|hijau|hitam|putih|pastel)\b/i,
+  /crepe\s*silk/i,
+  /cotton\s*viscose/i,
+  /\bmaterial\b/i,
+  /\bbahan\b/i,
 ];
 
 export interface IntentResult {
   qualifyingComboMet: boolean;
-  matchedProduct: string | null;
   matchedDetails: string[];
 }
 
 /**
- * Checks whether, across the conversation's customer messages, ALL slots for
- * any one product have now been satisfied.
+ * Checks whether, across the conversation's customer messages, both a
+ * size/fit detail and a variant detail have now been given.
  */
 export function checkQualifyingCombo(customerMessages: Message[]): IntentResult {
   const combinedText = customerMessages.map((m) => m.content).join(' \n ');
 
-  for (const config of PRODUCT_CONFIGS) {
-    const matchedDetails: string[] = [];
-    let allSlotsFilled = true;
+  const sizeMatch = SIZE_OR_FIT_PATTERNS.map((p) => combinedText.match(p)?.[0]).find(Boolean);
+  const variantMatch = VARIANT_PATTERNS.map((p) => combinedText.match(p)?.[0]).find(Boolean);
 
-    for (const slot of config.slots) {
-      const hit = slot.patterns.some((p) => p.test(combinedText));
-      if (!hit) {
-        allSlotsFilled = false;
-        break;
-      }
-      const match = slot.patterns.map((p) => combinedText.match(p)?.[0]).find(Boolean);
-      if (match) matchedDetails.push(match);
-    }
-
-    if (allSlotsFilled) {
-      return { qualifyingComboMet: true, matchedProduct: config.product, matchedDetails };
-    }
+  if (sizeMatch && variantMatch) {
+    return { qualifyingComboMet: true, matchedDetails: [sizeMatch, variantMatch] };
   }
-
-  return { qualifyingComboMet: false, matchedProduct: null, matchedDetails: [] };
+  return { qualifyingComboMet: false, matchedDetails: [] };
 }
