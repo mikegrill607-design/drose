@@ -142,7 +142,9 @@ webhookRouter.post('/', async (req, res) => {
         .select('topic, content, keywords')
         .eq('is_active', true);
       const [topMatch] = selectRelevantKb((kbEntries ?? []) as KnowledgeBaseEntry[], customerMessages);
-      const productGuess = topMatch?.topic ?? 'Unknown -- see message below';
+      const productGuess = topMatch
+        ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ')
+        : 'Unknown -- see message below';
 
       await handoffToStaff(conversation, productGuess, intent.matchedDetails, text);
       return;
