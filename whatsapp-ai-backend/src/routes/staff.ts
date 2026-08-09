@@ -88,7 +88,11 @@ staffRouter.post('/send-message', async (req, res) => {
 
   await supabase
     .from('conversations')
-    .update({ status: 'staff_handling', last_ai_or_staff_message_at: new Date().toISOString() })
+    .update({
+      status: 'staff_handling',
+      last_ai_or_staff_message_at: new Date().toISOString(),
+      staff_reminder_sent: false,
+    })
     .eq('id', conversationId);
 
   res.json({ ok: true, staffId: staffId ?? null });
@@ -130,7 +134,11 @@ staffRouter.post('/send-image', upload.single('file'), async (req, res) => {
 
     await supabase
       .from('conversations')
-      .update({ status: 'staff_handling', last_ai_or_staff_message_at: new Date().toISOString() })
+      .update({
+        status: 'staff_handling',
+        last_ai_or_staff_message_at: new Date().toISOString(),
+        staff_reminder_sent: false,
+      })
       .eq('id', conversationId);
 
     res.json({ ok: true, mediaUrl: publicUrl, staffId: staffId ?? null });
@@ -149,7 +157,11 @@ staffRouter.post('/take-over', async (req, res) => {
 
   const { error } = await supabase
     .from('conversations')
-    .update({ status: 'staff_handling' })
+    .update({
+      status: 'staff_handling',
+      last_ai_or_staff_message_at: new Date().toISOString(),
+      staff_reminder_sent: false,
+    })
     .eq('id', conversationId);
 
   if (error) {
@@ -169,7 +181,7 @@ staffRouter.post('/handback', async (req, res) => {
 
   const { error } = await supabase
     .from('conversations')
-    .update({ status: 'ai_active' })
+    .update({ status: 'ai_active', staff_reminder_sent: false })
     .eq('id', conversationId);
 
   if (error) {

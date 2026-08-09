@@ -9,6 +9,7 @@ import { settingsRouter } from './routes/settings';
 import { templatesRouter } from './routes/templates';
 import { startFollowUpCron } from './cron/followUp';
 import { startTemplateStatusCron } from './cron/templateStatus';
+import { startStaffReminderCron } from './cron/staffReminder';
 import { requireStaffAuth } from './lib/requireStaffAuth';
 import { ensureChatMediaBucket } from './lib/chatMedia';
 import { webhookLimiter, apiLimiter } from './lib/rateLimiters';
@@ -62,6 +63,7 @@ app.use('/templates', apiLimiter, requireStaffAuth, templatesRouter);
 ensureChatMediaBucket();
 startFollowUpCron();
 startTemplateStatusCron();
+startStaffReminderCron();
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {

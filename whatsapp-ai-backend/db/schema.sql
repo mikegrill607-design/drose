@@ -13,6 +13,7 @@ create table conversations (
   follow_up_stage int not null default 0, -- 0=none,1=day1,2=day3,3=day7
   last_customer_message_at timestamptz,
   last_ai_or_staff_message_at timestamptz,
+  staff_reminder_sent boolean not null default false, -- one nudge per untouched handoff, see cron/staffReminder.ts
   created_at timestamptz not null default now()
 );
 

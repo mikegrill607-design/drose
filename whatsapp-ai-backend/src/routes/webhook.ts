@@ -194,6 +194,10 @@ async function upsertConversation(
       .update({
         customer_name: customerName ?? existing.customer_name,
         last_customer_message_at: nowIso,
+        // A new customer message changes the situation staff need to
+        // react to -- re-arm the reminder rather than let a stale "already
+        // reminded" flag suppress a fresh nudge for this new message.
+        staff_reminder_sent: false,
       })
       .eq('id', existing.id)
       .select('*')
@@ -226,7 +230,14 @@ async function handoffToStaff(
 ): Promise<void> {
   await supabase
     .from('conversations')
-    .update({ status: 'awaiting_staff' })
+    .update({
+      status: 'awaiting_staff',
+      // Marks the moment this started needing staff attention --
+      // cron/staffReminder.ts measures "untouched" from here. Previously
+      // never set on handoff, so the reminder cron had no reliable signal.
+      last_ai_or_staff_message_at: new Date().toISOString(),
+      staff_reminder_sent: false,
+    })
     .eq('id', conversation.id);
 
   const { data: staff } = await supabase.from('staff').select('whatsapp_number');

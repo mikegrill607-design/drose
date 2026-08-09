@@ -12,6 +12,7 @@ export interface Conversation {
   follow_up_stage: number;
   last_customer_message_at: string | null;
   last_ai_or_staff_message_at: string | null;
+  staff_reminder_sent: boolean;
   created_at: string;
 }
 
