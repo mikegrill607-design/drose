@@ -51,6 +51,24 @@ export interface StaffRow {
   auth_user_id: string | null;
 }
 
+export type TemplateCategory = 'MARKETING' | 'UTILITY';
+export type TemplateStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'paused' | 'disabled';
+
+export interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  language: string;
+  category: TemplateCategory;
+  body_text: string;
+  variable_examples: string[] | null;
+  footer_text: string | null;
+  meta_template_id: string | null;
+  status: TemplateStatus;
+  rejected_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TokenUsageRow {
   id: string;
   conversation_id: string | null;

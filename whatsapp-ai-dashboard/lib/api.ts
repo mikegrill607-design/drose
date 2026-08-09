@@ -6,7 +6,7 @@
 // these routes would be wide open to anyone who finds the Railway URL.
 
 import { getSupabaseClient } from './supabaseClient';
-import { KnowledgeBaseEntry } from './types';
+import { KnowledgeBaseEntry, WhatsAppTemplate } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
 
@@ -131,6 +131,22 @@ export const backendApi = {
       method: 'PUT',
       body: JSON.stringify({ ...updates, staffId }),
     }),
+
+  getTemplates: () => backendFetch<WhatsAppTemplate[]>('/templates'),
+
+  createTemplate: (input: {
+    name: string;
+    language: string;
+    category: 'MARKETING' | 'UTILITY';
+    bodyText: string;
+    variableExamples: string[];
+    footerText?: string;
+  }) => backendFetch<WhatsAppTemplate>('/templates', { method: 'POST', body: JSON.stringify(input) }),
+
+  submitTemplate: (id: string) =>
+    backendFetch<WhatsAppTemplate>(`/templates/${id}/submit`, { method: 'POST' }),
+
+  deleteTemplate: (id: string) => backendFetch(`/templates/${id}`, { method: 'DELETE' }),
 
   getFollowUpSettings: () => backendFetch<Record<string, string>>('/settings/followup'),
 

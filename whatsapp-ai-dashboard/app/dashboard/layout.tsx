@@ -22,6 +22,7 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
       { href: '/dashboard/knowledge-base', label: 'Knowledge Base', icon: '📚' },
       { href: '/dashboard/system-prompt', label: 'System Prompt', icon: '📝' },
       { href: '/dashboard/follow-up', label: 'Follow-Up Messages', icon: '🔔' },
+      { href: '/dashboard/templates', label: 'Templates', icon: '💬' },
     ],
   },
   {

@@ -6,7 +6,9 @@ import { staffRouter } from './routes/staff';
 import { kbRouter } from './routes/kb';
 import { systemPromptRouter } from './routes/systemPrompt';
 import { settingsRouter } from './routes/settings';
+import { templatesRouter } from './routes/templates';
 import { startFollowUpCron } from './cron/followUp';
+import { startTemplateStatusCron } from './cron/templateStatus';
 import { requireStaffAuth } from './lib/requireStaffAuth';
 import { ensureChatMediaBucket } from './lib/chatMedia';
 
@@ -48,9 +50,11 @@ app.use('/staff', requireStaffAuth, staffRouter);
 app.use('/kb', requireStaffAuth, kbRouter);
 app.use('/system-prompt', requireStaffAuth, systemPromptRouter);
 app.use('/settings', requireStaffAuth, settingsRouter);
+app.use('/templates', requireStaffAuth, templatesRouter);
 
 ensureChatMediaBucket();
 startFollowUpCron();
+startTemplateStatusCron();
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {

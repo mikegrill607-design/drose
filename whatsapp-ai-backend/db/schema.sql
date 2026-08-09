@@ -87,6 +87,25 @@ create table system_prompt (
   created_at timestamptz not null default now()
 );
 
+-- WhatsApp Message Templates -- required by Meta to message a customer
+-- outside the 24-hour session window (e.g. Day 1/3/7 follow-ups). Draft rows
+-- are created locally first; "Submit for review" calls Meta's API and sets
+-- meta_template_id + status.
+create table whatsapp_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique, -- Meta-safe slug: lowercase, digits, underscores only
+  language text not null default 'ms',
+  category text not null default 'MARKETING', -- 'MARKETING' | 'UTILITY'
+  body_text text not null, -- may contain {{1}}, {{2}} placeholders
+  variable_examples text[], -- one example value per placeholder -- Meta requires these to review
+  footer_text text,
+  meta_template_id text,
+  status text not null default 'draft', -- draft | pending | approved | rejected | paused | disabled
+  rejected_reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Token usage log (for cost monitoring)
 create table token_usage (
   id uuid primary key default gen_random_uuid(),
@@ -109,6 +128,7 @@ alter table system_prompt enable row level security;
 alter table token_usage enable row level security;
 alter table follow_up_log enable row level security;
 alter table staff enable row level security;
+alter table whatsapp_templates enable row level security;
 
 create policy "authenticated read conversations" on conversations for select to authenticated using (true);
 create policy "authenticated read messages" on messages for select to authenticated using (true);
@@ -117,3 +137,4 @@ create policy "authenticated read system_prompt" on system_prompt for select to 
 create policy "authenticated read token_usage" on token_usage for select to authenticated using (true);
 create policy "authenticated read follow_up_log" on follow_up_log for select to authenticated using (true);
 create policy "authenticated read staff" on staff for select to authenticated using (true);
+create policy "authenticated read whatsapp_templates" on whatsapp_templates for select to authenticated using (true);
