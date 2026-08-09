@@ -7,26 +7,26 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 
 // Full nav -- desktop sidebar only. Grouped into labeled sections rather
 // than one flat list, same pattern as the client's other dashboards.
-const NAV_GROUPS: { heading: string; items: { href: string; label: string }[] }[] = [
+const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon: string }[] }[] = [
   {
     heading: 'Monitor',
     items: [
-      { href: '/dashboard', label: 'WhatsApp' },
-      { href: '/dashboard/usage', label: 'Usage' },
+      { href: '/dashboard', label: 'WhatsApp', icon: '💬' },
+      { href: '/dashboard/usage', label: 'Usage', icon: '📊' },
     ],
   },
   {
     heading: 'Configure',
     items: [
-      { href: '/dashboard/playground', label: 'Test Agent' },
-      { href: '/dashboard/knowledge-base', label: 'Knowledge Base' },
-      { href: '/dashboard/system-prompt', label: 'System Prompt' },
-      { href: '/dashboard/follow-up', label: 'Follow-Up Messages' },
+      { href: '/dashboard/playground', label: 'Test Agent', icon: '🧪' },
+      { href: '/dashboard/knowledge-base', label: 'Knowledge Base', icon: '📚' },
+      { href: '/dashboard/system-prompt', label: 'System Prompt', icon: '📝' },
+      { href: '/dashboard/follow-up', label: 'Follow-Up Messages', icon: '🔔' },
     ],
   },
   {
     heading: 'Connect',
-    items: [{ href: '/dashboard/settings', label: 'Settings' }],
+    items: [{ href: '/dashboard/settings', label: 'Settings', icon: '⚙️' }],
   },
 ];
 
@@ -55,23 +55,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AuthGuard>
       <div className="flex min-h-screen bg-neutral-50">
         {/* Desktop sidebar */}
-        <aside className="hidden w-56 shrink-0 border-r border-neutral-200 bg-white p-4 sm:flex sm:flex-col">
-          <h2 className="mb-6 text-sm font-semibold text-neutral-900">Drose Batik</h2>
-          <nav className="space-y-4">
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-neutral-200 bg-white p-4 sm:flex">
+          <h2 className="mb-8 text-sm font-semibold text-neutral-900">Drose Batik</h2>
+          <nav className="space-y-6">
             {NAV_GROUPS.map((group) => (
               <div key={group.heading}>
-                <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
                   {group.heading}
                 </p>
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {group.items.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`block rounded-md px-3 py-2 text-sm ${
+                      className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm ${
                         isActive(item.href) ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'
                       }`}
                     >
+                      <span className="text-sm">{item.icon}</span>
                       {item.label}
                     </Link>
                   ))}
@@ -81,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
           <button
             onClick={handleSignOut}
-            className="mt-8 w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm text-neutral-500 hover:bg-neutral-100"
+            className="mt-auto w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm text-neutral-500 hover:bg-neutral-100"
           >
             Sign out
           </button>
