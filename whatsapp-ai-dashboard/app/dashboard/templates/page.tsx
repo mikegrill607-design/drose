@@ -24,6 +24,8 @@ export default function TemplatesPage() {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('ms');
   const [category, setCategory] = useState<'MARKETING' | 'UTILITY'>('MARKETING');
+  const [headerText, setHeaderText] = useState('');
+  const [headerExample, setHeaderExample] = useState('');
   const [bodyText, setBodyText] = useState('');
   const [footerText, setFooterText] = useState('');
   const [variableExamples, setVariableExamples] = useState<string[]>([]);
@@ -32,6 +34,10 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const placeholderCount = useMemo(() => detectPlaceholderCount(bodyText), [bodyText]);
+  // Meta allows the header at most one variable, numbered independently
+  // from the body's {{1}}{{2}}... -- not "does the header contain {{2}}",
+  // just "does it contain {{1}} at all".
+  const headerHasVariable = useMemo(() => /\{\{1\}\}/.test(headerText), [headerText]);
 
   async function load() {
     const data = await backendApi.getTemplates();
@@ -45,6 +51,8 @@ export default function TemplatesPage() {
 
   function resetForm() {
     setName('');
+    setHeaderText('');
+    setHeaderExample('');
     setBodyText('');
     setFooterText('');
     setVariableExamples([]);
@@ -59,6 +67,8 @@ export default function TemplatesPage() {
         name,
         language,
         category,
+        headerText: headerText.trim() || undefined,
+        headerExample: headerHasVariable ? headerExample.trim() || undefined : undefined,
         bodyText: bodyText.trim(),
         variableExamples: variableExamples.slice(0, placeholderCount),
         footerText: footerText.trim() || undefined,
@@ -146,6 +156,27 @@ export default function TemplatesPage() {
 
         <div className="mb-3">
           <label className="mb-1 block text-xs font-medium text-neutral-600">
+            Header (optional) -- short line above the body, at most one {'{{1}}'} of its own
+          </label>
+          <input
+            value={headerText}
+            onChange={(e) => setHeaderText(e.target.value)}
+            maxLength={60}
+            placeholder="e.g. Drose Batik"
+            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
+          />
+          {headerHasVariable && (
+            <input
+              value={headerExample}
+              onChange={(e) => setHeaderExample(e.target.value)}
+              placeholder="Example value for the header's {{1}}"
+              className="mt-2 w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400"
+            />
+          )}
+        </div>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-neutral-600">
             Body text -- use {'{{1}}'}, {'{{2}}'} for variables
           </label>
           <textarea
@@ -226,7 +257,10 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            <div className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-700">{t.body_text}</div>
+            <div className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+              {t.header_text && <p className="mb-1 font-semibold text-neutral-900">{t.header_text}</p>}
+              {t.body_text}
+            </div>
             {t.footer_text && <p className="mt-1 text-xs text-neutral-400">{t.footer_text}</p>}
 
             {t.status === 'draft' && (

@@ -138,6 +138,8 @@ export const backendApi = {
     name: string;
     language: string;
     category: 'MARKETING' | 'UTILITY';
+    headerText?: string;
+    headerExample?: string;
     bodyText: string;
     variableExamples: string[];
     footerText?: string;

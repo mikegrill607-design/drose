@@ -25,7 +25,8 @@ function toMetaSafeName(raw: string): string {
 // Creates a DRAFT only -- doesn't touch Meta yet. Lets staff save work in
 // progress and review before actually submitting for approval.
 templatesRouter.post('/', async (req, res) => {
-  const { name, language, category, bodyText, variableExamples, footerText } = req.body ?? {};
+  const { name, language, category, headerText, headerExample, bodyText, variableExamples, footerText } =
+    req.body ?? {};
   if (!name || !bodyText) {
     res.status(400).json({ error: 'name and bodyText are required' });
     return;
@@ -41,6 +42,8 @@ templatesRouter.post('/', async (req, res) => {
       name: toMetaSafeName(name),
       language: language || 'ms',
       category: category || 'MARKETING',
+      header_text: headerText || null,
+      header_example: headerExample || null,
       body_text: bodyText,
       variable_examples: Array.isArray(variableExamples) ? variableExamples : [],
       footer_text: footerText || null,
@@ -77,6 +80,8 @@ templatesRouter.post('/:id/submit', async (req, res) => {
       name: template.name,
       language: template.language,
       category: template.category,
+      headerText: template.header_text,
+      headerExample: template.header_example,
       bodyText: template.body_text,
       variableExamples: template.variable_examples ?? [],
       footerText: template.footer_text,

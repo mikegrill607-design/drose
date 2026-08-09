@@ -97,6 +97,8 @@ create table whatsapp_templates (
   name text not null unique, -- Meta-safe slug: lowercase, digits, underscores only
   language text not null default 'ms',
   category text not null default 'MARKETING', -- 'MARKETING' | 'UTILITY'
+  header_text text, -- optional short line above the body, its own single {{1}} if used
+  header_example text, -- example value for the header's {{1}}, if present
   body_text text not null, -- may contain {{1}}, {{2}} placeholders
   variable_examples text[], -- one example value per placeholder -- Meta requires these to review
   footer_text text,

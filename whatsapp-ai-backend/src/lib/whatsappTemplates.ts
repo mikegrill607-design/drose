@@ -6,6 +6,8 @@ export interface CreateTemplateInput {
   name: string;
   language: string;
   category: 'MARKETING' | 'UTILITY';
+  headerText?: string | null;
+  headerExample?: string | null;
   bodyText: string;
   variableExamples: string[];
   footerText?: string | null;
@@ -28,15 +30,25 @@ export async function createMessageTemplate(input: CreateTemplateInput): Promise
     throw new Error('WhatsApp Business Account ID or Access Token not configured in Settings');
   }
 
-  const components: Record<string, unknown>[] = [
-    {
-      type: 'BODY',
-      text: input.bodyText,
-      ...(input.variableExamples.length > 0
-        ? { example: { body_text: [input.variableExamples] } }
-        : {}),
-    },
-  ];
+  const components: Record<string, unknown>[] = [];
+
+  if (input.headerText) {
+    components.push({
+      type: 'HEADER',
+      format: 'TEXT',
+      text: input.headerText,
+      ...(input.headerExample ? { example: { header_text: [input.headerExample] } } : {}),
+    });
+  }
+
+  components.push({
+    type: 'BODY',
+    text: input.bodyText,
+    ...(input.variableExamples.length > 0
+      ? { example: { body_text: [input.variableExamples] } }
+      : {}),
+  });
+
   if (input.footerText) {
     components.push({ type: 'FOOTER', text: input.footerText });
   }
@@ -86,11 +98,15 @@ export async function getTemplateStatus(metaTemplateId: string): Promise<Templat
 
 // Sends an approved template message -- the only way to reach a customer
 // outside the 24-hour session window (e.g. Day 1/3/7 follow-ups).
+// headerParameter fills the header's own {{1}} if the template has one --
+// numbered independently from the body's parameters, per Meta's component
+// model, so it's a separate argument rather than part of `parameters`.
 export async function sendWhatsAppTemplate(
   to: string,
   templateName: string,
   language: string,
-  parameters: string[]
+  parameters: string[],
+  headerParameter?: string | null
 ): Promise<string | null> {
   const settings = await getAppSettings();
   const phoneNumberId = settings.whatsapp_phone_number_id;
@@ -98,6 +114,14 @@ export async function sendWhatsAppTemplate(
   if (!phoneNumberId || !accessToken) {
     console.error('WhatsApp credentials not configured in app_settings; skipping template send to', to);
     return null;
+  }
+
+  const components: Record<string, unknown>[] = [];
+  if (headerParameter) {
+    components.push({ type: 'header', parameters: [{ type: 'text', text: headerParameter }] });
+  }
+  if (parameters.length > 0) {
+    components.push({ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) });
   }
 
   const res = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
@@ -110,9 +134,7 @@ export async function sendWhatsAppTemplate(
       template: {
         name: templateName,
         language: { code: language },
-        ...(parameters.length > 0
-          ? { components: [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }] }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     }),
   });

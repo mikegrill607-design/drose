@@ -60,6 +60,8 @@ export interface WhatsAppTemplate {
   name: string;
   language: string;
   category: TemplateCategory;
+  header_text: string | null;
+  header_example: string | null;
   body_text: string;
   variable_examples: string[] | null;
   footer_text: string | null;
