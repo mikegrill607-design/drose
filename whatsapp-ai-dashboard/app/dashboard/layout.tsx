@@ -11,6 +11,7 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
   {
     heading: 'Monitor',
     items: [
+      { href: '/dashboard/overview', label: 'Overview', icon: '📋' },
       { href: '/dashboard', label: 'WhatsApp', icon: '💬' },
       { href: '/dashboard/usage', label: 'Usage', icon: '📊' },
     ],

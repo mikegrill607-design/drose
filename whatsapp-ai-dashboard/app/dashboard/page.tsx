@@ -19,51 +19,10 @@ const STATUS_LABELS: Record<Conversation['status'], string> = {
   staff_handling: 'Staff handling',
 };
 
-interface Stats {
-  messagesReceived: number;
-  aiMessagesSent: number;
-  staffMessagesSent: number;
-  totalTokens: number;
-  aiSuccessRate: number | null; // null when there's no data yet
-}
-
-interface DashboardStatsRow {
-  messages_received: number;
-  ai_messages_sent: number;
-  staff_messages_sent: number;
-  total_tokens: number;
-  total_conversations: number;
-  staff_handled_conversations: number;
-}
-
-// Single round trip (db/migrations/003_dashboard_stats_rpc.sql) instead of 6
-// separate queries -- one of which used to fetch every token_usage row just
-// to sum it client-side.
-async function loadStats(): Promise<Stats> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.rpc('get_dashboard_stats').single();
-  if (error) throw error;
-
-  const row = data as DashboardStatsRow;
-  const aiSuccessRate =
-    row.total_conversations === 0
-      ? null
-      : (row.total_conversations - row.staff_handled_conversations) / row.total_conversations;
-
-  return {
-    messagesReceived: row.messages_received,
-    aiMessagesSent: row.ai_messages_sent,
-    staffMessagesSent: row.staff_messages_sent,
-    totalTokens: row.total_tokens,
-    aiSuccessRate,
-  };
-}
-
 export default function ConversationListPage() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [busyConvId, setBusyConvId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,8 +36,6 @@ export default function ConversationListPage() {
         setConversations(result.data ?? []);
         setLoading(false);
       });
-
-    loadStats().then(setStats);
 
     const channel = supabase
       .channel('conversations-list')
@@ -101,9 +58,6 @@ export default function ConversationListPage() {
           });
         }
       )
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-        loadStats().then(setStats);
-      })
       .subscribe();
 
     return () => {
@@ -132,18 +86,6 @@ export default function ConversationListPage() {
   return (
     <div className="p-6">
       <h1 className="mb-4 text-lg font-semibold text-neutral-900">Conversations</h1>
-
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatTile label="Messages received" value={stats?.messagesReceived} />
-        <StatTile label="AI replies sent" value={stats?.aiMessagesSent} />
-        <StatTile label="Staff replies sent" value={stats?.staffMessagesSent} />
-        <StatTile label="Tokens consumed" value={stats?.totalTokens} />
-        <StatTile
-          label="AI self-resolved rate"
-          value={stats?.aiSuccessRate == null ? undefined : `${Math.round(stats.aiSuccessRate * 100)}%`}
-          hint="Conversations the AI closed out without a staff takeover"
-        />
-      </div>
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -255,18 +197,6 @@ export default function ConversationListPage() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function StatTile({ label, value, hint }: { label: string; value: number | string | undefined; hint?: string }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3">
-      <p className="text-xs text-neutral-500">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-neutral-900">
-        {value === undefined ? <span className="text-neutral-300">—</span> : value}
-      </p>
-      {hint && <p className="mt-1 text-[10px] text-neutral-400">{hint}</p>}
     </div>
   );
 }

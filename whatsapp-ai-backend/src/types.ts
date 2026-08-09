@@ -60,11 +60,13 @@ export type AppSettingKey =
   | 'llm_provider' // 'groq' | 'openai'
   | 'llm_api_key'
   | 'llm_model' // optional override; defaults per-provider in src/lib/ai.ts
-  // Automatic follow-up copy (Day 1/3/7), owner-editable -- see
-  // src/lib/followUpDefaults.ts for the fallback text used until set.
-  | 'followup_day1_ms'
-  | 'followup_day1_en'
-  | 'followup_day3_ms'
-  | 'followup_day3_en'
-  | 'followup_day7_ms'
-  | 'followup_day7_en';
+  // Which approved whatsapp_templates.name to send for each automatic
+  // follow-up stage, per language -- Day 1/3/7 sends always happen outside
+  // Meta's 24-hour session window, so free text isn't an option here, only
+  // a pre-approved template. See src/routes/templates.ts.
+  | 'followup_day1_template_ms'
+  | 'followup_day1_template_en'
+  | 'followup_day3_template_ms'
+  | 'followup_day3_template_en'
+  | 'followup_day7_template_ms'
+  | 'followup_day7_template_en';

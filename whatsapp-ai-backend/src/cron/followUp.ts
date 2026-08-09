@@ -1,16 +1,19 @@
 import cron from 'node-cron';
 import { supabase } from '../lib/supabase';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendWhatsAppTemplate } from '../lib/whatsappTemplates';
 import { getAppSettings } from '../lib/appSettings';
-import { FOLLOW_UP_DEFAULTS, FollowUpKey } from '../lib/followUpDefaults';
-import { Conversation } from '../types';
+import { AppSettingKey, Conversation } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const STAGE_KEYS: Record<1 | 2 | 3, { ms: FollowUpKey; en: FollowUpKey }> = {
-  1: { ms: 'followup_day1_ms', en: 'followup_day1_en' },
-  2: { ms: 'followup_day3_ms', en: 'followup_day3_en' },
-  3: { ms: 'followup_day7_ms', en: 'followup_day7_en' },
+// Which app_settings key holds the approved template name for each stage,
+// per language. Day 1/3/7 sends always happen outside Meta's 24-hour
+// session window, so a pre-approved template is required -- free text is
+// rejected by Meta at this point, not just discouraged.
+const STAGE_TEMPLATE_KEYS: Record<1 | 2 | 3, { ms: AppSettingKey; en: AppSettingKey }> = {
+  1: { ms: 'followup_day1_template_ms', en: 'followup_day1_template_en' },
+  2: { ms: 'followup_day3_template_ms', en: 'followup_day3_template_en' },
+  3: { ms: 'followup_day7_template_ms', en: 'followup_day7_template_en' },
 };
 
 async function processConversation(conversation: Conversation): Promise<void> {
@@ -27,23 +30,52 @@ async function processConversation(conversation: Conversation): Promise<void> {
   if (!nextStage) return;
 
   const language = conversation.detected_language === 'en' ? 'en' : 'ms';
-  const settingKey = STAGE_KEYS[nextStage][language];
+  const settingKey = STAGE_TEMPLATE_KEYS[nextStage][language];
   const settings = await getAppSettings();
-  const copy = settings[settingKey] || FOLLOW_UP_DEFAULTS[settingKey];
+  const templateName = settings[settingKey];
 
-  await sendWhatsAppMessage(conversation.customer_phone, copy);
+  if (!templateName) {
+    console.warn(`No template configured for follow-up stage ${nextStage} (${language}); skipping conversation`, conversation.id);
+    return;
+  }
+
+  const { data: template, error: templateErr } = await supabase
+    .from('whatsapp_templates')
+    .select('*')
+    .eq('name', templateName)
+    .eq('status', 'approved')
+    .maybeSingle();
+
+  if (templateErr || !template) {
+    console.warn(`Configured template "${templateName}" not found or not approved; skipping conversation`, conversation.id);
+    return;
+  }
+
+  // Follow-up templates are expected to have at most one variable (the
+  // customer's name) -- keeps the mapping from "arbitrary approved
+  // template" to "what do we actually fill in" unambiguous.
+  const hasVariable = (template.variable_examples ?? []).length > 0;
+  const params = hasVariable ? [conversation.customer_name || (language === 'ms' ? 'kawan' : 'there')] : [];
+  const renderedContent = hasVariable ? template.body_text.replace('{{1}}', params[0]) : template.body_text;
+
+  const sentId = await sendWhatsAppTemplate(conversation.customer_phone, template.name, template.language, params);
+  if (!sentId) {
+    console.error(`Failed to send follow-up template "${templateName}" to`, conversation.customer_phone);
+    return;
+  }
 
   await supabase.from('messages').insert({
     conversation_id: conversation.id,
     sender: 'ai',
-    content: copy,
+    content: renderedContent,
+    wa_message_id: sentId,
   });
 
   await supabase.from('follow_up_log').insert({
     conversation_id: conversation.id,
     stage: nextStage,
     message_type: 'auto',
-    content: copy,
+    content: renderedContent,
   });
 
   await supabase

@@ -1,31 +1,42 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { backendApi } from '@/lib/api';
+import { WhatsAppTemplate } from '@/lib/types';
 
 const STAGES: { key: string; label: string; hint: string }[] = [
-  { key: 'followup_day1', label: 'Day 1', hint: 'Sent 1 day after the customer went quiet.' },
-  { key: 'followup_day3', label: 'Day 3', hint: 'Sent 3 days after, if they still haven’t replied.' },
-  { key: 'followup_day7', label: 'Day 7', hint: 'Last one -- auto-disables the sequence for that customer after this.' },
+  { key: 'followup_day1_template', label: 'Day 1', hint: 'Sent 1 day after the customer went quiet.' },
+  { key: 'followup_day3_template', label: 'Day 3', hint: 'Sent 3 days after, if they still haven’t replied.' },
+  { key: 'followup_day7_template', label: 'Day 7', hint: 'Last one -- auto-disables the sequence for that customer after this.' },
 ];
 
 export default function FollowUpPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
   async function load() {
-    const data = await backendApi.getFollowUpSettings();
-    setSettings(data);
-    setDraft(data);
+    const [settingsData, templatesData] = await Promise.all([
+      backendApi.getFollowUpSettings(),
+      backendApi.getTemplates(),
+    ]);
+    setSettings(settingsData);
+    setDraft(settingsData);
+    setTemplates(templatesData);
     setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  const approvedMs = templates.filter((t) => t.status === 'approved' && t.language === 'ms');
+  const approvedEn = templates.filter((t) => t.status === 'approved' && t.language === 'en');
+  const hasAnyApproved = approvedMs.length > 0 || approvedEn.length > 0;
 
   const hasUnsavedChanges = STAGES.some(
     (s) => draft[`${s.key}_ms`] !== settings[`${s.key}_ms`] || draft[`${s.key}_en`] !== settings[`${s.key}_en`]
@@ -53,27 +64,54 @@ export default function FollowUpPage() {
         chat view. Sent in whichever language the AI detected for that customer.
       </p>
 
+      {!hasAnyApproved && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          No approved templates yet. Day 1/3/7 sends happen outside Meta&apos;s 24-hour reply window, so they always
+          need a pre-approved template -- free text won&apos;t work here. Create and submit one on the{' '}
+          <Link href="/dashboard/templates" className="font-medium underline">
+            Templates
+          </Link>{' '}
+          page first.
+        </div>
+      )}
+
       <div className="space-y-6">
         {STAGES.map((stage) => (
           <div key={stage.key} className="rounded-lg border border-neutral-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-neutral-800">{stage.label}</h2>
             <p className="mb-3 text-xs text-neutral-400">{stage.hint}</p>
 
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Bahasa Melayu</label>
-            <textarea
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Bahasa Melayu template</label>
+            <select
               value={draft[`${stage.key}_ms`] ?? ''}
               onChange={(e) => setDraft({ ...draft, [`${stage.key}_ms`]: e.target.value })}
-              rows={3}
-              className="mb-3 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
-            />
+              disabled={approvedMs.length === 0}
+              className="mb-3 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-400"
+            >
+              <option value="">{approvedMs.length === 0 ? 'No approved BM templates yet' : '-- choose a template --'}</option>
+              {approvedMs.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name} -- {t.body_text.slice(0, 40)}
+                  {t.body_text.length > 40 ? '…' : ''}
+                </option>
+              ))}
+            </select>
 
-            <label className="mb-1 block text-xs font-medium text-neutral-600">English</label>
-            <textarea
+            <label className="mb-1 block text-xs font-medium text-neutral-600">English template</label>
+            <select
               value={draft[`${stage.key}_en`] ?? ''}
               onChange={(e) => setDraft({ ...draft, [`${stage.key}_en`]: e.target.value })}
-              rows={3}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
-            />
+              disabled={approvedEn.length === 0}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-400"
+            >
+              <option value="">{approvedEn.length === 0 ? 'No approved English templates yet' : '-- choose a template --'}</option>
+              {approvedEn.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name} -- {t.body_text.slice(0, 40)}
+                  {t.body_text.length > 40 ? '…' : ''}
+                </option>
+              ))}
+            </select>
           </div>
         ))}
       </div>

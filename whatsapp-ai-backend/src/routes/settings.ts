@@ -2,8 +2,17 @@ import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { invalidateAppSettingsCache } from '../lib/appSettings';
-import { FOLLOW_UP_DEFAULTS, FOLLOW_UP_KEYS } from '../lib/followUpDefaults';
 import { AppSettingKey } from '../types';
+
+// Which approved template to use for each Day 1/3/7 stage, per language.
+const FOLLOW_UP_TEMPLATE_KEYS: AppSettingKey[] = [
+  'followup_day1_template_ms',
+  'followup_day1_template_en',
+  'followup_day3_template_ms',
+  'followup_day3_template_en',
+  'followup_day7_template_ms',
+  'followup_day7_template_en',
+];
 
 export const settingsRouter = Router();
 
@@ -153,13 +162,13 @@ settingsRouter.put('/llm', async (req, res) => {
   }
 });
 
-// Automatic Day 1/3/7 follow-up copy -- owner-editable so wording changes
-// don't need a code change + redeploy. Falls back to FOLLOW_UP_DEFAULTS for
-// any stage never customized yet (cron/followUp.ts does the same fallback).
+// Which approved whatsapp_templates.name to send for each Day 1/3/7 stage,
+// per language -- these sends always happen outside Meta's 24-hour session
+// window, so a template is the only option, never free text.
 settingsRouter.get('/followup', async (_req, res) => {
   try {
-    const values = await fetchSettings(FOLLOW_UP_KEYS);
-    res.json({ ...FOLLOW_UP_DEFAULTS, ...values });
+    const values = await fetchSettings(FOLLOW_UP_TEMPLATE_KEYS);
+    res.json(values);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'failed to load settings' });
   }
@@ -168,7 +177,7 @@ settingsRouter.get('/followup', async (_req, res) => {
 settingsRouter.put('/followup', async (req, res) => {
   const { staffId, ...updates } = req.body ?? {};
   try {
-    await upsertSettings(updates, FOLLOW_UP_KEYS, staffId);
+    await upsertSettings(updates, FOLLOW_UP_TEMPLATE_KEYS, staffId);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
