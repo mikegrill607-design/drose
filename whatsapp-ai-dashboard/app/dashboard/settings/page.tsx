@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { backendApi } from '@/lib/api';
-import { StaffRow } from '@/lib/types';
+import { StaffRow, WhatsAppTemplate } from '@/lib/types';
 
 // Mirrors PROVIDER_DEFAULTS in whatsapp-ai-backend/src/lib/ai.ts -- only used
 // to show the owner what model is actually active when they've left the
@@ -85,6 +86,10 @@ export default function SettingsPage() {
   const [testingGoogle, setTestingGoogle] = useState(false);
   const [googleTestResult, setGoogleTestResult] = useState<'ok' | 'error' | null>(null);
   const [copiedScript, setCopiedScript] = useState(false);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [staffAlertSettings, setStaffAlertSettings] = useState<Record<string, string>>({});
+  const [staffAlertDraft, setStaffAlertDraft] = useState<Record<string, string>>({});
+  const [savingStaffAlerts, setSavingStaffAlerts] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -93,17 +98,22 @@ export default function SettingsPage() {
   async function loadAll() {
     setLoadError(null);
     try {
-      const [wa, llm, staffList, google] = await Promise.all([
+      const [wa, llm, staffList, google, staffAlerts, templatesList] = await Promise.all([
         backendApi.getWhatsAppSettings(),
         backendApi.getLlmSettings(),
         backendApi.getStaff(),
         backendApi.getGoogleSettings(),
+        backendApi.getStaffAlertSettings(),
+        backendApi.getTemplates(),
       ]);
       setWaSettings(wa);
       setLlmSettings(llm);
       setLlmDraft((prev) => ({ ...prev, llm_provider: llm.llm_provider || 'groq' }));
       setStaff(staffList ?? []);
       setGoogleSettings(google);
+      setStaffAlertSettings(staffAlerts);
+      setStaffAlertDraft(staffAlerts);
+      setTemplates(templatesList ?? []);
     } catch (err) {
       // Never leave the page stuck on "Loading..." -- show what broke instead.
       setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -207,6 +217,16 @@ export default function SettingsPage() {
     await navigator.clipboard.writeText(APPS_SCRIPT_SNIPPET);
     setCopiedScript(true);
     setTimeout(() => setCopiedScript(false), 1500);
+  }
+
+  async function handleSaveStaffAlerts() {
+    setSavingStaffAlerts(true);
+    try {
+      await backendApi.updateStaffAlertSettings(staffAlertDraft);
+      await loadAll();
+    } finally {
+      setSavingStaffAlerts(false);
+    }
   }
 
   async function handleAddStaff() {
@@ -472,7 +492,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <section className="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-800">Staff (handoff notifications)</h2>
 
         <div className="mb-3 space-y-2">
@@ -508,6 +528,85 @@ export default function SettingsPage() {
             Add
           </button>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-800">Staff Alert Fallback Templates</h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Staff notifications are sent as a normal WhatsApp message first, which only works if that staff member
+          has messaged your business number within the last 24 hours (Meta&apos;s session rule applies to staff
+          too, not just customers). These optional templates are used automatically as a fallback whenever that
+          fails, so an alert is never silently dropped.
+        </p>
+
+        {templates.filter((t) => t.status === 'approved').length === 0 && (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            No approved templates yet -- create and submit one on the{' '}
+            <Link href="/dashboard/templates" className="font-medium underline">
+              Templates
+            </Link>{' '}
+            page. A single template like <code>&quot;New handoff: {'{{1}}'} ({'{{2}}'})\nProduct: {'{{3}}'}\nDetails: {'{{4}}'}&quot;</code> covers every product.
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">
+              Handoff notification fallback (optional -- usually not needed, staff are typically active recently)
+            </label>
+            <select
+              value={staffAlertDraft.staff_handoff_template ?? ''}
+              onChange={(e) => setStaffAlertDraft({ ...staffAlertDraft, staff_handoff_template: e.target.value })}
+              disabled={templates.filter((t) => t.status === 'approved').length === 0}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-400"
+            >
+              <option value="">-- none (free text only) --</option>
+              {templates
+                .filter((t) => t.status === 'approved')
+                .map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name} ({t.language}) -- {t.body_text.slice(0, 40)}
+                    {t.body_text.length > 40 ? '…' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">
+              2-day reminder fallback (recommended -- by the time this fires, staff have almost always gone quiet
+              too)
+            </label>
+            <select
+              value={staffAlertDraft.staff_reminder_template ?? ''}
+              onChange={(e) => setStaffAlertDraft({ ...staffAlertDraft, staff_reminder_template: e.target.value })}
+              disabled={templates.filter((t) => t.status === 'approved').length === 0}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-400"
+            >
+              <option value="">-- none (free text only) --</option>
+              {templates
+                .filter((t) => t.status === 'approved')
+                .map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name} ({t.language}) -- {t.body_text.slice(0, 40)}
+                    {t.body_text.length > 40 ? '…' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSaveStaffAlerts}
+          disabled={
+            savingStaffAlerts ||
+            (staffAlertDraft.staff_handoff_template === staffAlertSettings.staff_handoff_template &&
+              staffAlertDraft.staff_reminder_template === staffAlertSettings.staff_reminder_template)
+          }
+          className="mt-4 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
+        >
+          {savingStaffAlerts ? 'Saving…' : 'Save fallback templates'}
+        </button>
       </section>
     </div>
   );

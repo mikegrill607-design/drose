@@ -186,4 +186,12 @@ export const backendApi = {
     }),
 
   testGoogleSheets: () => backendFetch<{ ok: true }>('/settings/google/test', { method: 'POST' }),
+
+  getStaffAlertSettings: () => backendFetch<Record<string, string>>('/settings/staff-alerts'),
+
+  updateStaffAlertSettings: (updates: Record<string, string>, staffId?: string) =>
+    backendFetch('/settings/staff-alerts', {
+      method: 'PUT',
+      body: JSON.stringify({ ...updates, staffId }),
+    }),
 };

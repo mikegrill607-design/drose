@@ -8,6 +8,7 @@ import { detectLanguage } from '../lib/language';
 import { checkQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
+import { notifyStaff } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
 import { Conversation, KnowledgeBaseEntry, Message } from '../types';
 
@@ -288,7 +289,16 @@ async function handoffToStaff(
 
   for (const s of staff ?? []) {
     if (s.whatsapp_number && !s.whatsapp_number.startsWith('TODO')) {
-      await sendWhatsAppMessage(s.whatsapp_number, notice);
+      await notifyStaff(s.whatsapp_number, {
+        freeText: notice,
+        templateSettingKey: 'staff_handoff_template',
+        templateParams: [
+          conversation.customer_name ?? conversation.customer_phone,
+          conversation.customer_phone,
+          product,
+          details.join(', '),
+        ],
+      });
     }
   }
 }

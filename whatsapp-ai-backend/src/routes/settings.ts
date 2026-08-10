@@ -7,6 +7,11 @@ import { AppSettingKey } from '../types';
 
 const GOOGLE_KEYS: AppSettingKey[] = ['google_sheets_webhook_url'];
 
+// Fallback approved templates for staff WhatsApp alerts -- see
+// src/lib/staffNotify.ts for why these are optional (free text is tried
+// first) but strongly recommended for the reminder in particular.
+const STAFF_ALERT_TEMPLATE_KEYS: AppSettingKey[] = ['staff_handoff_template', 'staff_reminder_template'];
+
 // Which approved template to use for each Day 1/3/7 stage, per language.
 const FOLLOW_UP_TEMPLATE_KEYS: AppSettingKey[] = [
   'followup_day1_template_ms',
@@ -224,6 +229,25 @@ settingsRouter.post('/google/test', async (_req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'failed to send test row' });
+  }
+});
+
+settingsRouter.get('/staff-alerts', async (_req, res) => {
+  try {
+    const values = await fetchSettings(STAFF_ALERT_TEMPLATE_KEYS);
+    res.json(values);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'failed to load settings' });
+  }
+});
+
+settingsRouter.put('/staff-alerts', async (req, res) => {
+  const { staffId, ...updates } = req.body ?? {};
+  try {
+    await upsertSettings(updates, STAFF_ALERT_TEMPLATE_KEYS, staffId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'failed to save settings' });
   }
 });
 

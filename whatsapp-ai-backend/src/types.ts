@@ -76,4 +76,11 @@ export type AppSettingKey =
   // Google Apps Script Web App URL -- each qualified lead (handoff trigger)
   // gets POSTed here so it lands as a row in the owner's own Google Sheet.
   // See src/lib/googleSheets.ts.
-  | 'google_sheets_webhook_url';
+  | 'google_sheets_webhook_url'
+  // Fallback approved templates for staff WhatsApp alerts, used only when
+  // free text fails to send (staff has no open 24h session). The 2-day
+  // reminder in particular is almost always outside that window by
+  // definition, so it needs this far more often than the immediate handoff
+  // notification does. See src/lib/staffNotify.ts.
+  | 'staff_handoff_template'
+  | 'staff_reminder_template';

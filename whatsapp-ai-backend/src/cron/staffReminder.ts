@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { supabase } from '../lib/supabase';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { notifyStaff } from '../lib/staffNotify';
 import { Conversation } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,7 +19,15 @@ async function remindConversation(conversation: Conversation): Promise<void> {
 
   for (const s of staff ?? []) {
     if (s.whatsapp_number && !s.whatsapp_number.startsWith('TODO')) {
-      await sendWhatsAppMessage(s.whatsapp_number, notice);
+      // This fires after 2 full days of silence, so the staff member's own
+      // 24h session with the bot has almost always already closed --
+      // relies on the fallback template far more often than the immediate
+      // handoff notification does.
+      await notifyStaff(s.whatsapp_number, {
+        freeText: notice,
+        templateSettingKey: 'staff_reminder_template',
+        templateParams: [conversation.customer_name ?? conversation.customer_phone, conversation.customer_phone],
+      });
     }
   }
 
