@@ -19,7 +19,20 @@ interface AttributeCategory {
 }
 
 const ATTRIBUTE_CATEGORIES: AttributeCategory[] = [
-  { name: 'size', patterns: [/\b(xs|s|m|l|xl|xxl|xxxl)\b/i, /\bsaiz\s*\w+/i] },
+  {
+    name: 'size',
+    patterns: [
+      /\b(xs|s|m|l|xl|xxl|xxxl)\b/i,
+      /\bsaiz\s*\w+/i,
+      // Customers often name the size in words instead of a letter code.
+      /\bkecil\b/i,
+      /\bsederhana\b/i,
+      /\bbesar\b/i,
+      /\bsmall\b/i,
+      /\bmedium\b/i,
+      /\blarge\b/i,
+    ],
+  },
   {
     name: 'sleeve/fit',
     patterns: [
