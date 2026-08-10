@@ -83,6 +83,29 @@ export default function ConversationListPage() {
     }
   }
 
+  async function handleToggleFollowUp(id: string, enabled: boolean) {
+    setBusyConvId(id);
+    try {
+      await backendApi.toggleFollowUp(id, enabled);
+    } finally {
+      setBusyConvId(null);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this conversation and its entire message history? This cannot be undone.')) return;
+    setBusyConvId(id);
+    try {
+      await backendApi.deleteConversation(id);
+      // Realtime DELETE event also removes it, but don't wait on that round-trip.
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete conversation');
+    } finally {
+      setBusyConvId(null);
+    }
+  }
+
   return (
     <div className="p-6">
       <h1 className="mb-4 text-lg font-semibold text-neutral-900">Conversations</h1>
@@ -111,29 +134,57 @@ export default function ConversationListPage() {
                   {c.customer_phone} ·{' '}
                   {c.last_customer_message_at ? new Date(c.last_customer_message_at).toLocaleString() : '—'}
                 </p>
-                {c.status === 'ai_active' ? (
+                <div className="flex gap-1.5">
+                  {c.status === 'ai_active' ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTakeOver(c.id);
+                      }}
+                      disabled={busyConvId === c.id}
+                      className="flex-1 rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    >
+                      Take over
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleHandback(c.id);
+                      }}
+                      disabled={busyConvId === c.id}
+                      className="flex-1 rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    >
+                      Hand back to AI
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleTakeOver(c.id);
+                      handleToggleFollowUp(c.id, !c.follow_up_enabled);
                     }}
                     disabled={busyConvId === c.id}
-                    className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    title="Auto follow-up (Day 1 / 3 / 7)"
+                    className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50 ${
+                      c.follow_up_enabled
+                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        : 'border-neutral-400 text-neutral-700 hover:bg-neutral-100'
+                    }`}
                   >
-                    Take over
+                    🔔
                   </button>
-                ) : (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleHandback(c.id);
+                      handleDelete(c.id);
                     }}
                     disabled={busyConvId === c.id}
-                    className="w-full rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                    title="Delete conversation"
+                    className="shrink-0 rounded-md border border-neutral-400 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
-                    Hand back to AI
+                    🗑
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -170,25 +221,51 @@ export default function ConversationListPage() {
                         : '—'}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      {c.status === 'ai_active' ? (
+                      <div className="flex justify-end gap-1.5">
+                        {c.status === 'ai_active' ? (
+                          <button
+                            onClick={() => handleTakeOver(c.id)}
+                            disabled={busyConvId === c.id}
+                            className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                            title="Jump in yourself -- the AI stops replying to this customer immediately"
+                          >
+                            Take over
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleHandback(c.id)}
+                            disabled={busyConvId === c.id}
+                            className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                            title="Let the AI resume replying to this customer"
+                          >
+                            Hand back to AI
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleTakeOver(c.id)}
+                          onClick={() => handleToggleFollowUp(c.id, !c.follow_up_enabled)}
                           disabled={busyConvId === c.id}
-                          className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-                          title="Jump in yourself -- the AI stops replying to this customer immediately"
+                          title={
+                            c.follow_up_enabled
+                              ? 'Auto follow-up (Day 1/3/7) is ON -- click to turn off'
+                              : 'Auto follow-up (Day 1/3/7) is OFF -- click to turn on'
+                          }
+                          className={`rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+                            c.follow_up_enabled
+                              ? 'border-blue-300 bg-blue-50 text-blue-700'
+                              : 'border-neutral-400 text-neutral-700 hover:bg-neutral-100'
+                          }`}
                         >
-                          Take over
+                          🔔 Follow-up
                         </button>
-                      ) : (
                         <button
-                          onClick={() => handleHandback(c.id)}
+                          onClick={() => handleDelete(c.id)}
                           disabled={busyConvId === c.id}
-                          className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-                          title="Let the AI resume replying to this customer"
+                          title="Delete conversation"
+                          className="rounded-md border border-neutral-400 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                         >
-                          Hand back to AI
+                          Delete
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
