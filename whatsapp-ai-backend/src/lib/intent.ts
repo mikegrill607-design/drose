@@ -22,13 +22,42 @@ const ATTRIBUTE_CATEGORIES: AttributeCategory[] = [
   { name: 'size', patterns: [/\b(xs|s|m|l|xl|xxl|xxxl)\b/i, /\bsaiz\s*\w+/i] },
   {
     name: 'sleeve/fit',
-    patterns: [/short\s*sleeve/i, /long\s*sleeve/i, /lengan\s*pendek/i, /lengan\s*panjang/i],
+    patterns: [
+      /short\s*sleeve/i,
+      /long\s*sleeve/i,
+      /lengan\s*pendek/i,
+      /lengan\s*panjang/i,
+      // A customer answering "lengan pendek atau panjang?" very often just
+      // replies with the one word ("pendek") rather than the full phrase --
+      // missing this was why "pendek dan saiz m" wasn't recognized as
+      // qualifying even though it's size + sleeve.
+      /\bpendek\b/i,
+      /\bpanjang\b/i,
+      /\bshort\b/i,
+      /\blong\b/i,
+    ],
   },
   {
     name: 'color',
     patterns: [/\bwarna\s*\w+/i, /\b(red|blue|green|black|white|merah|biru|hijau|hitam|putih|pastel)\b/i],
   },
-  { name: 'material', patterns: [/crepe\s*silk/i, /cotton\s*viscose/i, /\bmaterial\b/i, /\bbahan\b/i] },
+  {
+    name: 'material',
+    patterns: [
+      /crepe\s*silk/i,
+      /cotton\s*viscose/i,
+      /\bmaterial\b/i,
+      /\bbahan\b/i,
+      // Same bare-word issue -- a customer asked to pick a material usually
+      // just names it ("cotton") rather than saying "material: cotton".
+      /\bcotton\b/i,
+      /\bpolyester\b/i,
+      /\bsilk\b/i,
+      /\bviscose\b/i,
+      /\bcrepe\b/i,
+      /\blinen\b/i,
+    ],
+  },
 ];
 
 export interface IntentResult {
