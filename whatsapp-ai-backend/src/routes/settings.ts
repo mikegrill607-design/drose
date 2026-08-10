@@ -267,9 +267,18 @@ settingsRouter.post('/staff', async (req, res) => {
     return;
   }
 
+  // Meta's Graph API "to" field must be digits only -- a number saved with
+  // dashes/spaces/parentheses (easy to type by habit, e.g. "6011-6064 3167")
+  // silently fails to send with no visible error in the dashboard.
+  const sanitizedNumber = String(whatsapp_number).replace(/[^\d]/g, '');
+  if (!sanitizedNumber) {
+    res.status(400).json({ error: 'whatsapp_number must contain at least one digit' });
+    return;
+  }
+
   const { data, error } = await supabase
     .from('staff')
-    .insert({ name, whatsapp_number, auth_user_id: auth_user_id ?? null })
+    .insert({ name, whatsapp_number: sanitizedNumber, auth_user_id: auth_user_id ?? null })
     .select('*')
     .single();
 

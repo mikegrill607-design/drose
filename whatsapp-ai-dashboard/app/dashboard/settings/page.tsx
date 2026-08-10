@@ -516,9 +516,9 @@ export default function SettingsPage() {
             className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
           <input
-            placeholder="WhatsApp number (e.g. 60123456789)"
+            placeholder="WhatsApp number, digits only (e.g. 60123456789)"
             value={newStaffNumber}
-            onChange={(e) => setNewStaffNumber(e.target.value)}
+            onChange={(e) => setNewStaffNumber(e.target.value.replace(/[^\d]/g, ''))}
             className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
           />
           <button
