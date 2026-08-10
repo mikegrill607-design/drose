@@ -17,11 +17,16 @@ function tokensFor(entry: Pick<KnowledgeBaseEntry, 'topic' | 'keywords'>): strin
 
 export function selectRelevantKb(
   entries: KnowledgeBaseEntry[],
-  recentMessages: { sender: string; content: string }[]
+  recentMessages: { sender: string; content: string }[],
+  // AI replies only need recent context (keeps token cost down), but
+  // webhook.ts's product-guessing for handoffs/lead capture wants the whole
+  // conversation -- an early "kemeja lelaki ada?" shouldn't be forgotten just
+  // because the qualifying size/color details came several messages later.
+  messageWindow: number = RECENT_MESSAGES_FOR_MATCHING
 ): KnowledgeBaseEntry[] {
   const searchText = recentMessages
     .filter((m) => m.sender === 'customer')
-    .slice(-RECENT_MESSAGES_FOR_MATCHING)
+    .slice(-messageWindow)
     .map((m) => m.content)
     .join(' \n ')
     .toLowerCase();

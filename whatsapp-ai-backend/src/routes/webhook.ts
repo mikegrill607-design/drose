@@ -131,7 +131,15 @@ webhookRouter.post('/', async (req, res) => {
       .from('knowledge_base')
       .select('topic, content, keywords')
       .eq('is_active', true);
-    const [topMatch] = selectRelevantKb((kbEntries ?? []) as KnowledgeBaseEntry[], customerMessages);
+    // Search the WHOLE conversation, not just the last few messages -- unlike
+    // the AI reply's context window, guessing which product a handoff/lead is
+    // about should never forget an early "kemeja ada?" just because the
+    // qualifying details arrived several messages later.
+    const [topMatch] = selectRelevantKb(
+      (kbEntries ?? []) as KnowledgeBaseEntry[],
+      customerMessages,
+      customerMessages.length
+    );
     const productGuess = topMatch ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ') : null;
 
     if (intent.qualifyingComboMet) {

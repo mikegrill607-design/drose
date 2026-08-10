@@ -478,7 +478,7 @@ export default function SettingsPage() {
         <div className="mb-3 space-y-2">
           {staff.map((s) => (
             <div key={s.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-sm">
-              <span>
+              <span className="text-neutral-800">
                 {s.name} — {s.whatsapp_number}
               </span>
               <button onClick={() => handleRemoveStaff(s.id)} className="text-xs text-red-600 hover:underline">
