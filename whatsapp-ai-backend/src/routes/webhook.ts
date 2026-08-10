@@ -120,6 +120,20 @@ webhookRouter.post('/', async (req, res) => {
     const customerMessages = (history ?? []).filter((m: Message) => m.sender === 'customer');
     const intent = checkQualifyingCombo(customerMessages);
 
+    // intent.ts is generic across every product (not hardcoded per name), so
+    // it can't say WHICH product this is about -- reuse the same KB keyword
+    // router that picks AI reply context to guess it. A KB match at all
+    // (even without the full qualifying combo) is a lighter signal of real
+    // product interest, used below to log a "quality lead" the first time it
+    // shows up in this conversation -- not just when they've given enough
+    // detail for a full staff handoff.
+    const { data: kbEntries } = await supabase
+      .from('knowledge_base')
+      .select('topic, content, keywords')
+      .eq('is_active', true);
+    const [topMatch] = selectRelevantKb((kbEntries ?? []) as KnowledgeBaseEntry[], customerMessages);
+    const productGuess = topMatch ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ') : null;
+
     if (intent.qualifyingComboMet) {
       const language = conversation.detected_language ?? detectLanguage(text);
       const handoffMessage =
@@ -135,27 +149,35 @@ webhookRouter.post('/', async (req, res) => {
         wa_message_id: sentId,
       });
 
-      // intent.ts is generic across every product (not hardcoded per name),
-      // so it can't say WHICH product this handoff is about -- reuse the
-      // same KB keyword router that picks AI reply context to guess it.
-      const { data: kbEntries } = await supabase
-        .from('knowledge_base')
-        .select('topic, content, keywords')
-        .eq('is_active', true);
-      const [topMatch] = selectRelevantKb((kbEntries ?? []) as KnowledgeBaseEntry[], customerMessages);
-      const productGuess = topMatch
-        ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ')
-        : 'Unknown -- see message below';
+      await handoffToStaff(conversation, productGuess ?? 'Unknown -- see message below', intent.matchedDetails, text);
+      await sendLeadToGoogleSheets({
+        customerName: conversation.customer_name,
+        customerPhone: conversation.customer_phone,
+        product: productGuess ?? 'Unknown',
+        details: intent.matchedDetails.join(', '),
+        lastMessage: text,
+        status: 'Qualified — handed to staff',
+      });
+      if (!conversation.lead_logged_to_sheets) {
+        await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
+      }
+      return;
+    }
 
-      await handoffToStaff(conversation, productGuess, intent.matchedDetails, text);
+    if (productGuess && !conversation.lead_logged_to_sheets) {
+      // First sign of real product interest in this conversation -- log it
+      // as a lead even though they haven't given enough detail yet to
+      // qualify for a staff handoff, so the owner can see (and later
+      // follow up on) browsers who never converted, not just buyers.
       await sendLeadToGoogleSheets({
         customerName: conversation.customer_name,
         customerPhone: conversation.customer_phone,
         product: productGuess,
-        details: intent.matchedDetails.join(', '),
+        details: '',
         lastMessage: text,
+        status: 'New — chatting',
       });
-      return;
+      await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
     }
 
     const language = conversation.detected_language ?? detectLanguage(text);

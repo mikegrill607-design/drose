@@ -19,20 +19,43 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
 const APPS_SCRIPT_SNIPPET = `function doPost(e) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var data = JSON.parse(e.postData.contents);
+  var headers = ['Timestamp', 'Customer Name', 'Phone', 'Product', 'Details', 'Last Message', 'Status'];
 
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp', 'Customer Name', 'Phone', 'Product', 'Details', 'Last Message']);
+    sheet.appendRow(headers);
   }
 
-  sheet.appendRow([
+  var newRow = [
     data.timestamp,
     data.customerName,
     data.customerPhone,
     data.product,
     data.details,
     data.lastMessage,
-  ]);
+    data.status,
+  ];
 
+  // One row per customer -- if this phone number already has a row, update
+  // it in place instead of adding a new one. Blank incoming fields (e.g. a
+  // "mark as purchased" call only sends a new Status) leave that cell as-is
+  // rather than wiping out what was already captured.
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var existing = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (var i = 0; i < existing.length; i++) {
+      if (existing[i][2] === data.customerPhone) {
+        var merged = existing[i].map(function (oldValue, col) {
+          var incoming = newRow[col];
+          return incoming === '' || incoming === null || incoming === undefined ? oldValue : incoming;
+        });
+        sheet.getRange(i + 2, 1, 1, headers.length).setValues([merged]);
+        return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+  }
+
+  sheet.appendRow(newRow);
   return ContentService.createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
 }`;
@@ -362,9 +385,12 @@ export default function SettingsPage() {
       <section className="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-800">Google Sheets (Leads)</h2>
         <p className="mb-3 text-xs text-neutral-500">
-          Every qualified lead (a handoff to staff) gets added as a new row in your own Google Sheet
-          automatically. No Google account connection needed on our side -- you paste one URL from your own
-          Google Sheet.
+          Every customer who shows real interest in a product gets one row in your own Google Sheet
+          automatically -- even if they never end up buying -- so you can follow up and segment leads later.
+          That row updates itself over time: from &quot;New — chatting&quot;, to &quot;Qualified — handed to
+          staff&quot; once they give enough detail, to &quot;Purchased&quot; / &quot;Not purchased&quot; once
+          staff mark the outcome on the conversation page. No Google account connection needed on our side --
+          you paste one URL from your own Google Sheet.
         </p>
 
         <ol className="mb-3 list-decimal space-y-1.5 pl-4 text-xs text-neutral-600">
@@ -404,6 +430,12 @@ export default function SettingsPage() {
             <span className="font-medium text-neutral-800">Web app URL</span> it gives you and paste it below.
           </li>
         </ol>
+
+        <p className="mb-3 rounded-md bg-amber-50 p-2 text-xs text-amber-700">
+          Already set this up before? Replace the old script with the version above, then use{' '}
+          <span className="font-medium">Deploy → Manage deployments → Edit (pencil) → New version → Deploy</span>{' '}
+          so the same URL picks up the change -- no need to reconnect anything here.
+        </p>
 
         <div className="space-y-3">
           <Field

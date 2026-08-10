@@ -6,6 +6,7 @@ import { uploadChatMedia } from '../lib/chatMedia';
 import { generateAiReply } from '../lib/ai';
 import { detectLanguage } from '../lib/language';
 import { expensiveLimiter } from '../lib/rateLimiters';
+import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { MessageSender } from '../types';
 
 export const staffRouter = Router();
@@ -237,6 +238,50 @@ staffRouter.post('/follow-up/custom', async (req, res) => {
     content: text,
     sent_by: staffId ?? null,
   });
+
+  res.json({ ok: true });
+});
+
+// This system has no checkout -- sales close manually over WhatsApp, so only
+// a human knows whether one actually happened. Re-sends the lead's Google
+// Sheets row (upserted by phone number) with just the Status column changed,
+// so the owner can filter/segment "bought" vs "did not buy" leads later.
+staffRouter.post('/mark-outcome', async (req, res) => {
+  const { conversationId, outcome } = req.body ?? {};
+  if (!conversationId || !['purchased', 'not_purchased', null].includes(outcome ?? null)) {
+    res.status(400).json({ error: 'conversationId and outcome ("purchased" | "not_purchased" | null) are required' });
+    return;
+  }
+
+  const { data: conversation, error: convErr } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .single();
+  if (convErr || !conversation) {
+    res.status(404).json({ error: 'conversation not found' });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('conversations')
+    .update({ sale_outcome: outcome ?? null })
+    .eq('id', conversationId);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  if (outcome) {
+    await sendLeadToGoogleSheets({
+      customerName: null,
+      customerPhone: conversation.customer_phone,
+      product: '',
+      details: '',
+      lastMessage: '',
+      status: outcome === 'purchased' ? 'Purchased' : 'Not purchased',
+    });
+  }
 
   res.json({ ok: true });
 });

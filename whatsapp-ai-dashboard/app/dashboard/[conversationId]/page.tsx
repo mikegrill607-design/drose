@@ -109,6 +109,15 @@ export default function ConversationPage({
     await backendApi.handback(conversationId);
   }
 
+  async function handleMarkOutcome(outcome: 'purchased' | 'not_purchased' | null) {
+    setConversation((prev) => (prev ? { ...prev, sale_outcome: outcome } : prev));
+    try {
+      await backendApi.markOutcome(conversationId, outcome);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update outcome');
+    }
+  }
+
   async function handleCopyPhone() {
     if (!conversation) return;
     await navigator.clipboard.writeText(conversation.customer_phone);
@@ -201,6 +210,12 @@ export default function ConversationPage({
                 Pass Back to AI
               </button>
             )}
+            <div className="mb-2 border-t border-neutral-100 pt-2">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                Sale outcome
+              </p>
+              <OutcomeButtons outcome={conversation.sale_outcome} onSet={handleMarkOutcome} />
+            </div>
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
@@ -340,6 +355,17 @@ export default function ConversationPage({
           )}
         </div>
 
+        <div className="mb-4 rounded-md border border-neutral-200 p-3">
+          <p className="mb-2 text-xs text-neutral-600">
+            Sale outcome
+            <span className="block text-[10px] text-neutral-400">
+              This app can&apos;t see WhatsApp sales close -- mark it yourself so your Google Sheet lead can be
+              segmented later.
+            </span>
+          </p>
+          <OutcomeButtons outcome={conversation.sale_outcome} onSet={handleMarkOutcome} />
+        </div>
+
         <button
           onClick={handleDelete}
           disabled={deleting}
@@ -348,6 +374,39 @@ export default function ConversationPage({
           {deleting ? 'Deleting…' : 'Delete conversation'}
         </button>
       </aside>
+    </div>
+  );
+}
+
+function OutcomeButtons({
+  outcome,
+  onSet,
+}: {
+  outcome: Conversation['sale_outcome'];
+  onSet: (outcome: 'purchased' | 'not_purchased' | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <button
+        onClick={() => onSet(outcome === 'purchased' ? null : 'purchased')}
+        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+          outcome === 'purchased'
+            ? 'bg-green-600 text-white'
+            : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-100'
+        }`}
+      >
+        ✓ Purchased
+      </button>
+      <button
+        onClick={() => onSet(outcome === 'not_purchased' ? null : 'not_purchased')}
+        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+          outcome === 'not_purchased'
+            ? 'bg-neutral-700 text-white'
+            : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-100'
+        }`}
+      >
+        ✕ Did not buy
+      </button>
     </div>
   );
 }

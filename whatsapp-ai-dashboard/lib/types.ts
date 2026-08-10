@@ -13,6 +13,8 @@ export interface Conversation {
   last_customer_message_at: string | null;
   last_ai_or_staff_message_at: string | null;
   staff_reminder_sent: boolean;
+  lead_logged_to_sheets: boolean;
+  sale_outcome: 'purchased' | 'not_purchased' | null;
   created_at: string;
 }
 

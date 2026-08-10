@@ -14,6 +14,8 @@ create table conversations (
   last_customer_message_at timestamptz,
   last_ai_or_staff_message_at timestamptz,
   staff_reminder_sent boolean not null default false, -- one nudge per untouched handoff, see cron/staffReminder.ts
+  lead_logged_to_sheets boolean not null default false, -- dedupes the initial Google Sheets lead row, see src/lib/googleSheets.ts
+  sale_outcome text, -- 'purchased' | 'not_purchased' | null -- set manually by staff, no checkout in this system
   created_at timestamptz not null default now()
 );
 

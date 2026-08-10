@@ -219,6 +219,7 @@ settingsRouter.post('/google/test', async (_req, res) => {
       product: 'Test product',
       details: 'This is a test row from Drose Batik Settings',
       lastMessage: 'Test message -- safe to delete this row',
+      status: 'Test row',
     });
     res.json({ ok: true });
   } catch (err) {

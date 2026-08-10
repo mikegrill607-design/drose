@@ -75,6 +75,12 @@ export const backendApi = {
   deleteConversation: (conversationId: string) =>
     backendFetch(`/staff/conversations/${conversationId}`, { method: 'DELETE' }),
 
+  markOutcome: (conversationId: string, outcome: 'purchased' | 'not_purchased' | null) =>
+    backendFetch('/staff/mark-outcome', {
+      method: 'POST',
+      body: JSON.stringify({ conversationId, outcome }),
+    }),
+
   toggleFollowUp: (conversationId: string, enabled: boolean) =>
     backendFetch('/staff/follow-up/toggle', {
       method: 'POST',
