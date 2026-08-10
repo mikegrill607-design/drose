@@ -64,15 +64,34 @@ webhookRouter.post('/', async (req, res) => {
   // Ack immediately -- Meta retries aggressively on slow/failed responses.
   res.sendStatus(200);
 
-  try {
-    const entry = req.body?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-    const waMessage = value?.messages?.[0];
-    if (!waMessage) return; // status update / non-message webhook, ignore
+  // Meta can batch several messages into ONE webhook POST (entry[] and
+  // messages[] are both arrays for exactly this reason) -- this happens in
+  // practice whenever multiple messages arrive close together, which is
+  // common under ad-driven traffic bursts. Only reading index [0] silently
+  // dropped every other message in the batch with no error at all. Process
+  // every entry/change/message found, and sequentially (not in parallel) so
+  // two messages from the same brand-new customer in one batch can't race
+  // upsertConversation into inserting duplicate rows.
+  const entries = req.body?.entry ?? [];
+  for (const entry of entries) {
+    const changes = entry?.changes ?? [];
+    for (const change of changes) {
+      const value = change?.value;
+      const messages = value?.messages ?? [];
+      for (let i = 0; i < messages.length; i++) {
+        try {
+          await processInboundMessage(messages[i], value?.contacts?.[i]?.profile?.name);
+        } catch (err) {
+          console.error('webhook message processing failed', err);
+        }
+      }
+    }
+  }
+});
 
-    const customerPhone: string = waMessage.from;
-    const customerName: string | undefined = value?.contacts?.[0]?.profile?.name;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
+async function processInboundMessage(waMessage: any, customerName: string | undefined): Promise<void> {
+  const customerPhone: string = waMessage.from;
     const waMessageId: string = waMessage.id;
 
     let text = '';
@@ -173,18 +192,18 @@ webhookRouter.post('/', async (req, res) => {
       return;
     }
 
-    if (productGuess && !conversation.lead_logged_to_sheets) {
-      // First sign of real product interest in this conversation -- log it
-      // as a lead even though they haven't given enough detail yet to
-      // qualify for a staff handoff, so the owner can see (and later
-      // follow up on) browsers who never converted, not just buyers.
+    if (!conversation.lead_logged_to_sheets) {
+      // Every lead gets a row, not just ones that show product interest --
+      // the "Status" column is what tells qualified apart from not, so
+      // non-qualified/browsing customers can still be remarketed to
+      // differently instead of being invisible in the spreadsheet.
       await sendLeadToGoogleSheets({
         customerName: conversation.customer_name,
         customerPhone: conversation.customer_phone,
-        product: productGuess,
+        product: productGuess ?? '',
         details: '',
         lastMessage: text,
-        status: 'New — chatting',
+        status: 'Not qualified — chatting',
       });
       await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
     }
@@ -207,14 +226,11 @@ webhookRouter.post('/', async (req, res) => {
       tokens_used: ai.totalTokens,
     });
 
-    await supabase
-      .from('conversations')
-      .update({ last_ai_or_staff_message_at: new Date().toISOString() })
-      .eq('id', conversation.id);
-  } catch (err) {
-    console.error('webhook processing failed', err);
-  }
-});
+  await supabase
+    .from('conversations')
+    .update({ last_ai_or_staff_message_at: new Date().toISOString() })
+    .eq('id', conversation.id);
+}
 
 async function upsertConversation(
   customerPhone: string,
