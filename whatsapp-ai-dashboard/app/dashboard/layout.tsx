@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AuthGuard } from '@/components/AuthGuard';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useHandoffAlerts, NotificationBell, HandoffToast } from '@/components/HandoffAlerts';
 
 // Full nav -- desktop sidebar only. Grouped into labeled sections rather
 // than one flat list, same pattern as the client's other dashboards.
@@ -43,6 +44,7 @@ const MOBILE_NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { unhandledCount, toast, dismissToast } = useHandoffAlerts();
 
   async function handleSignOut() {
     await getSupabaseClient().auth.signOut();
@@ -58,7 +60,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen bg-neutral-50">
         {/* Desktop sidebar */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-neutral-200 bg-white p-4 sm:flex">
-          <h2 className="mb-8 text-sm font-semibold text-neutral-900">Drose Batik</h2>
+          <div className="mb-8 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-900">Drose Batik</h2>
+            <NotificationBell count={unhandledCount} />
+          </div>
           <nav className="space-y-6">
             {NAV_GROUPS.map((group) => (
               <div key={group.heading}>
@@ -93,10 +98,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Mobile top bar */}
         <header className="fixed inset-x-0 top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 sm:hidden">
           <h2 className="text-sm font-semibold text-neutral-900">Drose Batik</h2>
-          <button onClick={handleSignOut} className="text-xs text-neutral-500">
-            Sign out
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationBell count={unhandledCount} />
+            <button onClick={handleSignOut} className="px-1.5 text-xs text-neutral-500">
+              Sign out
+            </button>
+          </div>
         </header>
+
+        <HandoffToast toast={toast} onDismiss={dismissToast} />
 
         <main className="flex-1 overflow-auto pt-12 pb-16 sm:pt-0 sm:pb-0">{children}</main>
 
