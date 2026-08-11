@@ -4,6 +4,7 @@ import cors from 'cors';
 import { webhookRouter } from './routes/webhook';
 import { staffRouter } from './routes/staff';
 import { kbRouter } from './routes/kb';
+import { designCatalogRouter } from './routes/designCatalog';
 import { systemPromptRouter } from './routes/systemPrompt';
 import { settingsRouter } from './routes/settings';
 import { templatesRouter } from './routes/templates';
@@ -56,6 +57,7 @@ app.use('/webhook', webhookLimiter, webhookRouter);
 // Everything else is dashboard-only: require a valid Supabase staff session.
 app.use('/staff', apiLimiter, requireStaffAuth, staffRouter);
 app.use('/kb', apiLimiter, requireStaffAuth, kbRouter);
+app.use('/design-catalog', apiLimiter, requireStaffAuth, designCatalogRouter);
 app.use('/system-prompt', apiLimiter, requireStaffAuth, systemPromptRouter);
 app.use('/settings', apiLimiter, requireStaffAuth, settingsRouter);
 app.use('/templates', apiLimiter, requireStaffAuth, templatesRouter);

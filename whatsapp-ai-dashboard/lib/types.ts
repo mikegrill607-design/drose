@@ -15,6 +15,7 @@ export interface Conversation {
   staff_reminder_sent: boolean;
   lead_logged_to_sheets: boolean;
   sale_outcome: 'purchased' | 'not_purchased' | null;
+  sent_design_codes: string[];
   created_at: string;
 }
 
@@ -44,6 +45,19 @@ export interface SystemPromptRow {
   content: string;
   is_active: boolean;
   updated_by: string | null;
+  created_at: string;
+}
+
+// One row per photo -- a design code (e.g. "MZF A5") typically has 2-3
+// photos (full shot + close-up detail), grouped by design_code in the UI.
+export interface DesignCatalogEntry {
+  id: string;
+  design_code: string;
+  product_topic: string; // matches KnowledgeBaseEntry.topic
+  material: string | null;
+  color: string | null;
+  image_url: string;
+  is_active: boolean;
   created_at: string;
 }
 

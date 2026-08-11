@@ -2,11 +2,12 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Request, Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { getAppSettings } from '../lib/appSettings';
-import { sendWhatsAppMessage, downloadWhatsAppMedia } from '../lib/whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppImage, downloadWhatsAppMedia } from '../lib/whatsapp';
 import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
+import { designCatalogHasEntriesForTopic, getMatchingDesignGroups } from '../lib/designCatalog';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { notifyStaff } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
@@ -177,7 +178,93 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     );
     const productGuess = topMatch ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ') : null;
 
-    if (intent.qualifyingComboMet) {
+    // Design-catalog products (kain-pasang style) are a deliberate exception
+    // to "AI never sends photos" -- the AI sends the actual design-code
+    // photos itself once material/color is known, and staff only step in
+    // once the customer names a code to reserve stock + send payment info.
+    // Products with no catalog rows (e.g. Kemeja) fall through to the
+    // regular generic 2-of-4 attribute handoff below unchanged.
+    const hasDesignCatalog = topMatch ? await designCatalogHasEntriesForTopic(topMatch.topic) : false;
+
+    if (hasDesignCatalog && topMatch) {
+      const alreadyShownCodes = conversation.sent_design_codes;
+
+      if (alreadyShownCodes.length > 0) {
+        const chosenCode = alreadyShownCodes.find((code) => text.toLowerCase().includes(code.toLowerCase()));
+        if (chosenCode) {
+          const handoffMessage =
+            language === 'ms'
+              ? `Terima kasih! Staff kami akan sahkan design ${chosenCode} dan hantar butiran pembayaran sekejap lagi ya 😊`
+              : `Thank you! Our team will confirm design ${chosenCode} and send payment details shortly 😊`;
+
+          const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            sender: 'ai',
+            content: handoffMessage,
+            wa_message_id: sentId,
+          });
+
+          const details = [`kod design: ${chosenCode}`];
+          await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
+          await sendLeadToGoogleSheets({
+            customerName: conversation.customer_name,
+            customerPhone: conversation.customer_phone,
+            product: productGuess ?? 'Kain Pasang',
+            details: details.join(', '),
+            lastMessage: text,
+            status: 'Qualified — handed to staff',
+          });
+          if (!conversation.lead_logged_to_sheets) {
+            await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
+          }
+          return;
+        }
+        // Designs already sent, no code named yet -- fall through to a normal reply.
+      } else {
+        const material = ai.extractedAttributes?.material ?? null;
+        const color = ai.extractedAttributes?.color ?? null;
+
+        if (material || color) {
+          const groups = await getMatchingDesignGroups(topMatch.topic, material, color);
+          if (groups.length > 0) {
+            for (const group of groups) {
+              for (let i = 0; i < group.imageUrls.length; i++) {
+                const caption = i === 0 ? `Kod Design: ${group.designCode}` : undefined;
+                const sentId = await sendWhatsAppImage(customerPhone, group.imageUrls[i], caption);
+                await supabase.from('messages').insert({
+                  conversation_id: conversation.id,
+                  sender: 'ai',
+                  content: caption ?? '',
+                  media_url: group.imageUrls[i],
+                  wa_message_id: sentId,
+                });
+              }
+            }
+
+            const askMessage =
+              language === 'ms' ? 'Kod design mana yang anda suka? 😊' : 'Which design code do you like? 😊';
+            const askId = await sendWhatsAppMessage(customerPhone, askMessage);
+            await supabase.from('messages').insert({
+              conversation_id: conversation.id,
+              sender: 'ai',
+              content: askMessage,
+              wa_message_id: askId,
+            });
+
+            await supabase
+              .from('conversations')
+              .update({
+                sent_design_codes: groups.map((g) => g.designCode),
+                last_ai_or_staff_message_at: new Date().toISOString(),
+              })
+              .eq('id', conversation.id);
+            return;
+          }
+        }
+        // Not enough info yet to narrow down designs -- fall through to a normal reply.
+      }
+    } else if (intent.qualifyingComboMet) {
       const handoffMessage =
         language === 'ms'
           ? 'Terima kasih! Staff kami akan follow up dengan koleksi yang sesuai sekejap lagi ya 😊'

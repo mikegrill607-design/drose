@@ -6,7 +6,7 @@
 // these routes would be wide open to anyone who finds the Railway URL.
 
 import { getSupabaseClient } from './supabaseClient';
-import { KnowledgeBaseEntry, WhatsAppTemplate } from './types';
+import { DesignCatalogEntry, KnowledgeBaseEntry, WhatsAppTemplate } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
 
@@ -196,4 +196,34 @@ export const backendApi = {
       method: 'PUT',
       body: JSON.stringify({ ...updates, staffId }),
     }),
+
+  getDesignCatalog: (productTopic?: string) =>
+    backendFetch<DesignCatalogEntry[]>(
+      `/design-catalog${productTopic ? `?product_topic=${encodeURIComponent(productTopic)}` : ''}`
+    ),
+
+  // One photo per call -- upload each photo for a design code separately
+  // (they share the same design_code so they group together when sent).
+  uploadDesignPhoto: (input: {
+    designCode: string;
+    productTopic: string;
+    material?: string;
+    color?: string;
+    file: File;
+  }) => {
+    const formData = new FormData();
+    formData.append('design_code', input.designCode);
+    formData.append('product_topic', input.productTopic);
+    if (input.material) formData.append('material', input.material);
+    if (input.color) formData.append('color', input.color);
+    formData.append('file', input.file);
+    return backendUpload<DesignCatalogEntry>('/design-catalog/upload', formData);
+  },
+
+  updateDesignCatalogEntry: (
+    id: string,
+    updates: { design_code?: string; material?: string; color?: string; is_active?: boolean }
+  ) => backendFetch<DesignCatalogEntry>(`/design-catalog/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
+
+  deleteDesignCatalogEntry: (id: string) => backendFetch(`/design-catalog/${id}`, { method: 'DELETE' }),
 };

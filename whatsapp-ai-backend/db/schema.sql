@@ -16,6 +16,7 @@ create table conversations (
   staff_reminder_sent boolean not null default false, -- one nudge per untouched handoff, see cron/staffReminder.ts
   lead_logged_to_sheets boolean not null default false, -- dedupes the initial Google Sheets lead row, see src/lib/googleSheets.ts
   sale_outcome text, -- 'purchased' | 'not_purchased' | null -- set manually by staff, no checkout in this system
+  sent_design_codes text[] not null default '{}', -- design_catalog codes already shown to this customer, see src/lib/designCatalog.ts
   created_at timestamptz not null default now()
 );
 
@@ -110,6 +111,27 @@ create table whatsapp_templates (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Design-code image catalog -- lets the AI itself send kain-pasang-style
+-- product photos so the customer can pick a design code, instead of
+-- waiting for staff (a deliberate, product-scoped exception to "AI never
+-- sends photos" -- products with no rows here keep the old behavior). One
+-- row per photo, not per design -- a design code (e.g. "MZF A5") typically
+-- has 2-3 photos, grouped by design_code in application code. See
+-- src/lib/designCatalog.ts.
+create table design_catalog (
+  id uuid primary key default gen_random_uuid(),
+  design_code text not null,
+  product_topic text not null, -- matches knowledge_base.topic for the product this design belongs to
+  material text,
+  color text,
+  image_url text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index design_catalog_topic_code_idx on design_catalog (product_topic, design_code);
+alter table design_catalog enable row level security;
+create policy "authenticated read design_catalog" on design_catalog for select to authenticated using (true);
 
 -- Token usage log (for cost monitoring)
 create table token_usage (
