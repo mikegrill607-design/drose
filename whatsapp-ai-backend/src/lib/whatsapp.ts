@@ -2,18 +2,24 @@ import { getAppSettings } from './appSettings';
 
 const GRAPH_API_VERSION = 'v20.0';
 
-/**
- * Sends a plain-text WhatsApp message via the Cloud API. Credentials come
- * from `app_settings` (entered via the dashboard Settings page), not env vars.
- */
-export async function sendWhatsAppMessage(to: string, text: string): Promise<string | null> {
+export interface SendTextResult {
+  ok: boolean;
+  messageId: string | null;
+  error?: string;
+}
+
+// Does the actual send and returns full diagnostic detail -- used directly
+// by the Settings "Test" button so a failure reason (Meta's real error, not
+// just "didn't arrive") shows up in the dashboard instead of only ever being
+// visible in Railway's server logs, which isn't somewhere non-technical
+// staff can easily check.
+export async function sendWhatsAppTextVerbose(to: string, text: string): Promise<SendTextResult> {
   const settings = await getAppSettings();
   const phoneNumberId = settings.whatsapp_phone_number_id;
   const accessToken = settings.whatsapp_access_token;
 
   if (!phoneNumberId || !accessToken) {
-    console.error('WhatsApp credentials not configured in app_settings; skipping send to', to);
-    return null;
+    return { ok: false, messageId: null, error: 'WhatsApp credentials not configured in Settings' };
   }
 
   const res = await fetch(
@@ -35,12 +41,24 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<str
 
   if (!res.ok) {
     const body = await res.text();
-    console.error('WhatsApp send failed', res.status, body);
-    return null;
+    return { ok: false, messageId: null, error: `HTTP ${res.status}: ${body}` };
   }
 
   const json = (await res.json()) as { messages?: { id: string }[] };
-  return json.messages?.[0]?.id ?? null;
+  return { ok: true, messageId: json.messages?.[0]?.id ?? null };
+}
+
+/**
+ * Sends a plain-text WhatsApp message via the Cloud API. Credentials come
+ * from `app_settings` (entered via the dashboard Settings page), not env vars.
+ */
+export async function sendWhatsAppMessage(to: string, text: string): Promise<string | null> {
+  const result = await sendWhatsAppTextVerbose(to, text);
+  if (!result.ok) {
+    console.error('WhatsApp send failed', result.error);
+    return null;
+  }
+  return result.messageId;
 }
 
 /**

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { invalidateAppSettingsCache } from '../lib/appSettings';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
+import { sendWhatsAppTextVerbose } from '../lib/whatsapp';
 import { AppSettingKey } from '../types';
 
 const GOOGLE_KEYS: AppSettingKey[] = ['google_sheets_webhook_url'];
@@ -294,6 +295,31 @@ settingsRouter.delete('/staff/:id', async (req, res) => {
   const { error } = await supabase.from('staff').delete().eq('id', id);
   if (error) {
     res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// Sends a real free-text WhatsApp message directly to one staff number and
+// returns Meta's actual result -- lets staff diagnose "notifications aren't
+// arriving" themselves from the dashboard (e.g. a closed 24h session shows
+// up as a specific error here) instead of needing someone to check Railway's
+// server logs, which isn't practical for non-technical users.
+settingsRouter.post('/staff/:id/test', async (req, res) => {
+  const { id } = req.params;
+  const { data: staffRow, error } = await supabase.from('staff').select('*').eq('id', id).single();
+  if (error || !staffRow) {
+    res.status(404).json({ error: 'staff not found' });
+    return;
+  }
+
+  const result = await sendWhatsAppTextVerbose(
+    staffRow.whatsapp_number,
+    'Test notification from Drose Batik dashboard -- if you received this, staff alerts are working! ✅'
+  );
+
+  if (!result.ok) {
+    res.status(400).json({ error: result.error ?? 'send failed for an unknown reason' });
     return;
   }
   res.json({ ok: true });

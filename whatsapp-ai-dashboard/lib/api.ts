@@ -177,6 +177,8 @@ export const backendApi = {
 
   removeStaff: (id: string) => backendFetch(`/settings/staff/${id}`, { method: 'DELETE' }),
 
+  testStaffNotification: (id: string) => backendFetch<{ ok: true }>(`/settings/staff/${id}/test`, { method: 'POST' }),
+
   getGoogleSettings: () => backendFetch<Record<string, string>>('/settings/google'),
 
   updateGoogleSettings: (updates: Record<string, string>, staffId?: string) =>

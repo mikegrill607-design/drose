@@ -80,6 +80,8 @@ export default function SettingsPage() {
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffNumber, setNewStaffNumber] = useState('');
+  const [testingStaffId, setTestingStaffId] = useState<string | null>(null);
+  const [staffTestResult, setStaffTestResult] = useState<{ id: string; ok: boolean; message: string } | null>(null);
   const [googleSettings, setGoogleSettings] = useState<Record<string, string>>({});
   const [googleDraft, setGoogleDraft] = useState('');
   const [savingGoogle, setSavingGoogle] = useState(false);
@@ -241,6 +243,19 @@ export default function SettingsPage() {
     if (!confirm('Remove this staff member?')) return;
     await backendApi.removeStaff(id);
     await loadAll();
+  }
+
+  async function handleTestStaff(id: string) {
+    setTestingStaffId(id);
+    setStaffTestResult(null);
+    try {
+      await backendApi.testStaffNotification(id);
+      setStaffTestResult({ id, ok: true, message: 'Sent -- check that WhatsApp number now.' });
+    } catch (err) {
+      setStaffTestResult({ id, ok: false, message: err instanceof Error ? err.message : 'Test failed' });
+    } finally {
+      setTestingStaffId(null);
+    }
   }
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -497,13 +512,29 @@ export default function SettingsPage() {
 
         <div className="mb-3 space-y-2">
           {staff.map((s) => (
-            <div key={s.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-sm">
-              <span className="text-neutral-800">
-                {s.name} — {s.whatsapp_number}
-              </span>
-              <button onClick={() => handleRemoveStaff(s.id)} className="text-xs text-red-600 hover:underline">
-                Remove
-              </button>
+            <div key={s.id} className="rounded-md bg-neutral-50 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-800">
+                  {s.name} — {s.whatsapp_number}
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleTestStaff(s.id)}
+                    disabled={testingStaffId === s.id}
+                    className="text-xs text-neutral-600 underline hover:text-neutral-800 disabled:opacity-50"
+                  >
+                    {testingStaffId === s.id ? 'Sending…' : 'Test'}
+                  </button>
+                  <button onClick={() => handleRemoveStaff(s.id)} className="text-xs text-red-600 hover:underline">
+                    Remove
+                  </button>
+                </div>
+              </div>
+              {staffTestResult?.id === s.id && (
+                <p className={`mt-1 text-xs ${staffTestResult.ok ? 'text-green-600' : 'text-red-600'}`}>
+                  {staffTestResult.message}
+                </p>
+              )}
             </div>
           ))}
         </div>
