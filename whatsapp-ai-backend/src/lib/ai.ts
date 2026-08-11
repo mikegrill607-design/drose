@@ -85,8 +85,58 @@ function formatHistory(messages: HistoryMessage[]): string {
     .join('\n');
 }
 
+export interface ExtractedAttributes {
+  size: string | null;
+  sleeve: string | null;
+  color: string | null;
+  material: string | null;
+}
+
+const ATTRIBUTES_DELIMITER = '###ATTRIBUTES###';
+
+// Appended to whatever system prompt the owner wrote -- not something they
+// edit themselves. Regex-based matching (src/lib/intent.ts) kept missing
+// real customer phrasing (typos like "pemdek" for "pendek", word choices
+// not in the pattern list, etc.) because it has no actual language
+// understanding. The model answering the customer already understands all
+// of that fine, so it reports what it understood instead of a second
+// system trying to re-derive it from raw text with regex.
+const ATTRIBUTE_EXTRACTION_INSTRUCTION = `
+---
+After writing your reply above, on a new line output exactly "${ATTRIBUTES_DELIMITER}" followed by a single-line JSON object capturing what the CUSTOMER has stated so far in this whole conversation (not just their latest message) for these four attributes: size, sleeve (short/long), color, material. Use a short value in the customer's own words for each one they've given, or null if not given yet. Interpret typos and casual phrasing normally (e.g. "pemdek" means "pendek"). Only fill a field once they've clearly specified it -- never guess or default one. Example: ${ATTRIBUTES_DELIMITER}\n{"size":"M","sleeve":"short","color":null,"material":null}
+This JSON line is read by code and never shown to the customer.`;
+
+function parseCompletion(raw: string): { reply: string; extractedAttributes: ExtractedAttributes | null } {
+  const delimiterIdx = raw.indexOf(ATTRIBUTES_DELIMITER);
+  if (delimiterIdx === -1) {
+    return { reply: raw.trim(), extractedAttributes: null };
+  }
+
+  const reply = raw.slice(0, delimiterIdx).trim();
+  const jsonPart = raw.slice(delimiterIdx + ATTRIBUTES_DELIMITER.length).trim();
+  try {
+    const parsed = JSON.parse(jsonPart);
+    return {
+      reply,
+      extractedAttributes: {
+        size: parsed.size ?? null,
+        sleeve: parsed.sleeve ?? null,
+        color: parsed.color ?? null,
+        material: parsed.material ?? null,
+      },
+    };
+  } catch {
+    // Model didn't format it correctly this time -- caller falls back to
+    // regex-based detection (src/lib/intent.ts) rather than crash.
+    return { reply, extractedAttributes: null };
+  }
+}
+
 export interface AiReplyResult {
   reply: string;
+  // null if the model's output didn't include a parseable attributes line
+  // this time -- caller should fall back to regex-based detection.
+  extractedAttributes: ExtractedAttributes | null;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
@@ -110,16 +160,18 @@ export async function generateAiReply(
   const completion = await client.chat.completions.create({
     model,
     messages: [
-      { role: 'system', content: `${systemPrompt}\n\n${kbContext}` },
+      { role: 'system', content: `${systemPrompt}\n\n${kbContext}${ATTRIBUTE_EXTRACTION_INSTRUCTION}` },
       { role: 'user', content: history },
     ],
   });
 
-  const reply = completion.choices[0]?.message?.content?.trim() ?? '';
+  const raw = completion.choices[0]?.message?.content ?? '';
+  const { reply, extractedAttributes } = parseCompletion(raw);
   const usage = completion.usage;
 
   const result: AiReplyResult = {
     reply,
+    extractedAttributes,
     promptTokens: usage?.prompt_tokens ?? 0,
     completionTokens: usage?.completion_tokens ?? 0,
     totalTokens: usage?.total_tokens ?? 0,

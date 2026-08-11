@@ -5,7 +5,7 @@ import { getAppSettings } from '../lib/appSettings';
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from '../lib/whatsapp';
 import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
-import { checkQualifyingCombo } from '../lib/intent';
+import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { notifyStaff } from '../lib/staffNotify';
@@ -138,7 +138,22 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       .order('created_at', { ascending: true });
 
     const customerMessages = (history ?? []).filter((m: Message) => m.sender === 'customer');
-    const intent = checkQualifyingCombo(customerMessages);
+
+    const language = conversation.detected_language ?? detectLanguage(text);
+    if (!conversation.detected_language) {
+      await supabase.from('conversations').update({ detected_language: language }).eq('id', conversation.id);
+    }
+
+    // Always generate the reply first -- besides being the normal AI reply,
+    // this is now also where qualifying-detail extraction comes from (see
+    // ATTRIBUTE_EXTRACTION_INSTRUCTION in src/lib/ai.ts), since the model
+    // already understands typos/phrasing ("pemdek" for "pendek", etc.) that
+    // the regex-only detector kept missing. On the one message that turns
+    // out to qualify, this generated reply is discarded in favor of the
+    // fixed handoff message below -- a small one-time cost per conversation
+    // in exchange for not silently dropping real qualifying messages.
+    const ai = await generateAiReply(conversation.id, history ?? []);
+    const intent = resolveQualifyingCombo(customerMessages, ai.extractedAttributes);
 
     // intent.ts is generic across every product (not hardcoded per name), so
     // it can't say WHICH product this is about -- reuse the same KB keyword
@@ -163,7 +178,6 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     const productGuess = topMatch ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ') : null;
 
     if (intent.qualifyingComboMet) {
-      const language = conversation.detected_language ?? detectLanguage(text);
       const handoffMessage =
         language === 'ms'
           ? 'Terima kasih! Staff kami akan follow up dengan koleksi yang sesuai sekejap lagi ya 😊'
@@ -208,12 +222,6 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
     }
 
-    const language = conversation.detected_language ?? detectLanguage(text);
-    if (!conversation.detected_language) {
-      await supabase.from('conversations').update({ detected_language: language }).eq('id', conversation.id);
-    }
-
-    const ai = await generateAiReply(conversation.id, history ?? []);
     if (!ai.reply) return;
 
     const sentId = await sendWhatsAppMessage(customerPhone, ai.reply);

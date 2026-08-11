@@ -1,4 +1,5 @@
 import { Message } from '../types';
+import { ExtractedAttributes } from './ai';
 
 /**
  * Handoff trigger = customer has given a full qualifying combo needed to
@@ -94,6 +95,41 @@ export function checkQualifyingCombo(customerMessages: Message[]): IntentResult 
     return {
       qualifyingComboMet: true,
       matchedDetails: matches.map((m) => `${m.name}: ${m.match}`),
+    };
+  }
+  return { qualifyingComboMet: false, matchedDetails: [] };
+}
+
+/**
+ * Primary qualifying check -- uses the AI's own extraction (see
+ * src/lib/ai.ts), since it actually understands the conversation (typos,
+ * synonyms, unusual phrasing) rather than pattern-matching raw text. Falls
+ * back to the regex-based checkQualifyingCombo only if the model's output
+ * didn't include a parseable attributes line this time (extractedAttributes
+ * is null) -- keeps a working detector even on an occasional bad model
+ * response instead of silently detecting nothing.
+ */
+export function resolveQualifyingCombo(
+  customerMessages: Message[],
+  extractedAttributes: ExtractedAttributes | null
+): IntentResult {
+  if (!extractedAttributes) {
+    return checkQualifyingCombo(customerMessages);
+  }
+
+  const matches = (
+    [
+      ['size', extractedAttributes.size],
+      ['sleeve/fit', extractedAttributes.sleeve],
+      ['color', extractedAttributes.color],
+      ['material', extractedAttributes.material],
+    ] as [string, string | null][]
+  ).filter(([, value]) => value);
+
+  if (matches.length >= 2) {
+    return {
+      qualifyingComboMet: true,
+      matchedDetails: matches.map(([name, value]) => `${name}: ${value}`),
     };
   }
   return { qualifyingComboMet: false, matchedDetails: [] };
