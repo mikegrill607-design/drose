@@ -115,11 +115,23 @@ async function processStatusUpdate(status: any): Promise<void> {
     ? status.errors.map((e: { code?: number; title?: string; message?: string }) => `[${e.code}] ${e.title ?? e.message ?? ''}`).join('; ')
     : null;
 
-  const { error } = await supabase
+  // The message could be a customer-conversation message OR a staff alert
+  // (handoff/reminder/test) -- those live in two different tables, and a
+  // given wa_message_id only ever belongs to one of them. Try both rather
+  // than assuming; an update matching 0 rows is a silent no-op either way.
+  const { error: messagesError, count: messagesCount } = await supabase
     .from('messages')
-    .update({ delivery_status: newStatus, delivery_error: errorDetail })
+    .update({ delivery_status: newStatus, delivery_error: errorDetail }, { count: 'exact' })
     .eq('wa_message_id', waMessageId);
-  if (error) console.error('Failed to record delivery status for', waMessageId, error);
+  if (messagesError) console.error('Failed to record delivery status on messages for', waMessageId, messagesError);
+
+  if (!messagesCount) {
+    const { error: alertError } = await supabase
+      .from('staff_alert_log')
+      .update({ delivery_status: newStatus, delivery_error: errorDetail })
+      .eq('wa_message_id', waMessageId);
+    if (alertError) console.error('Failed to record delivery status on staff_alert_log for', waMessageId, alertError);
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
