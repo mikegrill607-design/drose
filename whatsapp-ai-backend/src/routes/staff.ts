@@ -310,6 +310,12 @@ staffRouter.delete('/conversations/:id', async (req, res) => {
     return;
   }
 
+  const { error: alertLogErr } = await supabase.from('staff_alert_log').delete().eq('conversation_id', id);
+  if (alertLogErr) {
+    res.status(500).json({ error: alertLogErr.message });
+    return;
+  }
+
   const { error } = await supabase.from('conversations').delete().eq('id', id);
   if (error) {
     res.status(500).json({ error: error.message });
