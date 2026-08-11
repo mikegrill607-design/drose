@@ -261,6 +261,18 @@ settingsRouter.get('/staff', async (_req, res) => {
   res.json(data);
 });
 
+// Meta's Graph API "to" field needs the FULL international number (country
+// code, no leading 0) -- a Malaysian mobile typed in the everyday local
+// format (e.g. "011-6064 3167") looks like valid digits after stripping
+// punctuation, so the previous fix (digits-only) let it through unchanged.
+// Meta will sometimes auto-guess the country code for a bare local number,
+// but that's not reliable enough to depend on -- convert explicitly instead.
+function toInternationalMyNumber(digitsOnly: string): string {
+  if (digitsOnly.startsWith('60')) return digitsOnly; // already international
+  if (digitsOnly.startsWith('0')) return `60${digitsOnly.slice(1)}`; // local format -- 0xx... -> 60xx...
+  return digitsOnly; // unrecognized shape, leave as-is rather than guess wrong
+}
+
 settingsRouter.post('/staff', async (req, res) => {
   const { name, whatsapp_number, auth_user_id } = req.body ?? {};
   if (!name || !whatsapp_number) {
@@ -271,11 +283,12 @@ settingsRouter.post('/staff', async (req, res) => {
   // Meta's Graph API "to" field must be digits only -- a number saved with
   // dashes/spaces/parentheses (easy to type by habit, e.g. "6011-6064 3167")
   // silently fails to send with no visible error in the dashboard.
-  const sanitizedNumber = String(whatsapp_number).replace(/[^\d]/g, '');
-  if (!sanitizedNumber) {
+  const digitsOnly = String(whatsapp_number).replace(/[^\d]/g, '');
+  if (!digitsOnly) {
     res.status(400).json({ error: 'whatsapp_number must contain at least one digit' });
     return;
   }
+  const sanitizedNumber = toInternationalMyNumber(digitsOnly);
 
   const { data, error } = await supabase
     .from('staff')
@@ -317,6 +330,19 @@ settingsRouter.post('/staff/:id/test', async (req, res) => {
     staffRow.whatsapp_number,
     'Test notification from Drose Batik dashboard -- if you received this, staff alerts are working! ✅'
   );
+
+  // Logged the same as real alerts so the delivery-status webhook has a row
+  // to update -- lets "did it actually arrive" be checked afterward, not
+  // just whether the API call itself succeeded.
+  await supabase.from('staff_alert_log').insert({
+    staff_whatsapp_number: staffRow.whatsapp_number,
+    conversation_id: null,
+    kind: 'test',
+    sent_via: 'text',
+    wa_message_id: result.messageId,
+    delivery_status: result.messageId ? 'sent' : 'failed',
+    delivery_error: result.ok ? null : result.error ?? 'unknown error',
+  });
 
   if (!result.ok) {
     res.status(400).json({ error: result.error ?? 'send failed for an unknown reason' });

@@ -86,9 +86,41 @@ webhookRouter.post('/', async (req, res) => {
           console.error('webhook message processing failed', err);
         }
       }
+
+      // Meta also reports delivery outcomes for messages THIS app sent
+      // (sent/delivered/read/failed) in the same webhook shape -- previously
+      // ignored entirely, which is why "the API said 200" and "did it
+      // actually arrive" were two different, unanswerable questions. Now
+      // recorded on the original message row so delivery can be confirmed
+      // (or a real failure reason seen) straight from the database.
+      const statuses = value?.statuses ?? [];
+      for (const status of statuses) {
+        try {
+          await processStatusUpdate(status);
+        } catch (err) {
+          console.error('webhook status processing failed', err);
+        }
+      }
     }
   }
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
+async function processStatusUpdate(status: any): Promise<void> {
+  const waMessageId: string | undefined = status?.id;
+  const newStatus: string | undefined = status?.status; // 'sent' | 'delivered' | 'read' | 'failed'
+  if (!waMessageId || !newStatus) return;
+
+  const errorDetail = Array.isArray(status?.errors)
+    ? status.errors.map((e: { code?: number; title?: string; message?: string }) => `[${e.code}] ${e.title ?? e.message ?? ''}`).join('; ')
+    : null;
+
+  const { error } = await supabase
+    .from('messages')
+    .update({ delivery_status: newStatus, delivery_error: errorDetail })
+    .eq('wa_message_id', waMessageId);
+  if (error) console.error('Failed to record delivery status for', waMessageId, error);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
 async function processInboundMessage(waMessage: any, customerName: string | undefined): Promise<void> {
@@ -409,6 +441,8 @@ async function handoffToStaff(
           product,
           details.join(', '),
         ],
+        kind: 'handoff',
+        conversationId: conversation.id,
       });
     }
   }

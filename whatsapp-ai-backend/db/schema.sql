@@ -29,6 +29,8 @@ create table messages (
   media_url text, -- set for image messages (catalog photos, customer-sent images)
   wa_message_id text,
   tokens_used int, -- populated for AI-generated messages
+  delivery_status text, -- sent | delivered | read | failed | null, from Meta's status webhook events
+  delivery_error text, -- Meta's error detail, only set when delivery_status = 'failed'
   created_at timestamptz not null default now()
 );
 
@@ -111,6 +113,25 @@ create table whatsapp_templates (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Staff WhatsApp alerts (handoff notifications, 2-day reminders) -- logs
+-- every send attempt so a delivery-status webhook event (sent/delivered/
+-- read/failed, with Meta's real error on failure) has something to match
+-- against. See src/lib/staffNotify.ts.
+create table staff_alert_log (
+  id uuid primary key default gen_random_uuid(),
+  staff_whatsapp_number text not null,
+  conversation_id uuid references conversations(id),
+  kind text not null, -- 'handoff' | 'reminder' | 'test'
+  sent_via text not null, -- 'text' | 'template'
+  wa_message_id text,
+  delivery_status text,
+  delivery_error text,
+  created_at timestamptz not null default now()
+);
+create index staff_alert_log_wa_message_id_idx on staff_alert_log (wa_message_id);
+alter table staff_alert_log enable row level security;
+create policy "authenticated read staff_alert_log" on staff_alert_log for select to authenticated using (true);
 
 -- Design-code image catalog -- lets the AI itself send kain-pasang-style
 -- product photos so the customer can pick a design code, instead of

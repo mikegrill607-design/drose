@@ -27,6 +27,8 @@ async function remindConversation(conversation: Conversation): Promise<void> {
         freeText: notice,
         templateSettingKey: 'staff_reminder_template',
         templateParams: [conversation.customer_name ?? conversation.customer_phone, conversation.customer_phone],
+        kind: 'reminder',
+        conversationId: conversation.id,
       });
     }
   }

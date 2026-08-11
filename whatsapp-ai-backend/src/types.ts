@@ -27,6 +27,8 @@ export interface Message {
   media_url: string | null;
   wa_message_id: string | null;
   tokens_used: number | null;
+  delivery_status: 'sent' | 'delivered' | 'read' | 'failed' | null;
+  delivery_error: string | null;
   created_at: string;
 }
 
