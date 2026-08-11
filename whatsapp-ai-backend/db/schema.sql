@@ -17,6 +17,7 @@ create table conversations (
   lead_logged_to_sheets boolean not null default false, -- dedupes the initial Google Sheets lead row, see src/lib/googleSheets.ts
   sale_outcome text, -- 'purchased' | 'not_purchased' | null -- set manually by staff, no checkout in this system
   sent_design_codes text[] not null default '{}', -- design_catalog codes already shown to this customer, see src/lib/designCatalog.ts
+  sent_size_chart boolean not null default false, -- dedupes the size-chart auto-send, see src/lib/sizeChart.ts
   created_at timestamptz not null default now()
 );
 
@@ -153,6 +154,22 @@ create table design_catalog (
 create index design_catalog_topic_code_idx on design_catalog (product_topic, design_code);
 alter table design_catalog enable row level security;
 create policy "authenticated read design_catalog" on design_catalog for select to authenticated using (true);
+
+-- Size chart reference images -- simpler than design_catalog: no "pick a
+-- code" step, just a fixed set of images (e.g. short/long sleeve
+-- measurement charts) auto-sent once when a customer shows interest in a
+-- product that has one. See src/lib/sizeChart.ts.
+create table size_chart_images (
+  id uuid primary key default gen_random_uuid(),
+  product_topic text not null,
+  label text,
+  image_url text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index size_chart_images_topic_idx on size_chart_images (product_topic);
+alter table size_chart_images enable row level security;
+create policy "authenticated read size_chart_images" on size_chart_images for select to authenticated using (true);
 
 -- Token usage log (for cost monitoring)
 create table token_usage (

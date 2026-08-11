@@ -16,6 +16,7 @@ export interface Conversation {
   lead_logged_to_sheets: boolean;
   sale_outcome: 'purchased' | 'not_purchased' | null;
   sent_design_codes: string[];
+  sent_size_chart: boolean;
   created_at: string;
 }
 
@@ -27,6 +28,8 @@ export interface Message {
   media_url: string | null;
   wa_message_id: string | null;
   tokens_used: number | null;
+  delivery_status: 'sent' | 'delivered' | 'read' | 'failed' | null;
+  delivery_error: string | null;
   created_at: string;
 }
 
@@ -56,6 +59,18 @@ export interface DesignCatalogEntry {
   product_topic: string; // matches KnowledgeBaseEntry.topic
   material: string | null;
   color: string | null;
+  image_url: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Simpler than DesignCatalogEntry -- no design_code/material/color, no
+// "pick one" step. Just a fixed image (or set of images) auto-sent once
+// per conversation when a customer shows interest in a product that has one.
+export interface SizeChartImage {
+  id: string;
+  product_topic: string; // matches KnowledgeBaseEntry.topic
+  label: string | null;
   image_url: string;
   is_active: boolean;
   created_at: string;

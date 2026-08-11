@@ -6,7 +6,7 @@
 // these routes would be wide open to anyone who finds the Railway URL.
 
 import { getSupabaseClient } from './supabaseClient';
-import { DesignCatalogEntry, KnowledgeBaseEntry, WhatsAppTemplate } from './types';
+import { DesignCatalogEntry, KnowledgeBaseEntry, SizeChartImage, WhatsAppTemplate } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
 
@@ -226,4 +226,22 @@ export const backendApi = {
   ) => backendFetch<DesignCatalogEntry>(`/design-catalog/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
 
   deleteDesignCatalogEntry: (id: string) => backendFetch(`/design-catalog/${id}`, { method: 'DELETE' }),
+
+  getSizeChartImages: (productTopic?: string) =>
+    backendFetch<SizeChartImage[]>(
+      `/size-chart${productTopic ? `?product_topic=${encodeURIComponent(productTopic)}` : ''}`
+    ),
+
+  uploadSizeChartImage: (input: { productTopic: string; label?: string; file: File }) => {
+    const formData = new FormData();
+    formData.append('product_topic', input.productTopic);
+    if (input.label) formData.append('label', input.label);
+    formData.append('file', input.file);
+    return backendUpload<SizeChartImage>('/size-chart/upload', formData);
+  },
+
+  updateSizeChartImage: (id: string, updates: { label?: string; is_active?: boolean }) =>
+    backendFetch<SizeChartImage>(`/size-chart/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
+
+  deleteSizeChartImage: (id: string) => backendFetch(`/size-chart/${id}`, { method: 'DELETE' }),
 };

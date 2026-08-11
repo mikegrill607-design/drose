@@ -8,6 +8,7 @@ import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
 import { designCatalogHasEntriesForTopic, getMatchingDesignGroups } from '../lib/designCatalog';
+import { getSizeChartImages } from '../lib/sizeChart';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { notifyStaff } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
@@ -221,6 +222,32 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       customerMessages.length
     );
     const productGuess = topMatch ? topMatch.topic.replace(/^product_/, '').replace(/_/g, ' ') : null;
+
+    // Size chart images -- a simpler, separate exception to "AI never sends
+    // photos" than the design catalog below: no "pick one" step, just a
+    // fixed reference image (or set of them, e.g. short/long sleeve charts)
+    // sent once so the customer can check exact measurements while telling
+    // the AI their size. Only products with rows in size_chart_images get
+    // this; everything else is unaffected. Fires as soon as the topic is
+    // recognized, before the qualifying-combo/design-catalog branches below
+    // (which can return early), so it isn't skipped on a message that
+    // happens to also qualify immediately.
+    if (topMatch && !conversation.sent_size_chart) {
+      const chartImages = await getSizeChartImages(topMatch.topic);
+      if (chartImages.length > 0) {
+        for (const chart of chartImages) {
+          const sentId = await sendWhatsAppImage(customerPhone, chart.image_url, chart.label ?? undefined);
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            sender: 'ai',
+            content: chart.label ?? '',
+            media_url: chart.image_url,
+            wa_message_id: sentId,
+          });
+        }
+        await supabase.from('conversations').update({ sent_size_chart: true }).eq('id', conversation.id);
+      }
+    }
 
     // Design-catalog products (kain-pasang style) are a deliberate exception
     // to "AI never sends photos" -- the AI sends the actual design-code
