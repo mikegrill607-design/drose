@@ -18,7 +18,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, newSession: Session | null) => {
+      (event: AuthChangeEvent, newSession: Session | null) => {
+        // A staff invite (or a password-reset link) lands here with a
+        // temporary session but no password ever set -- without this check,
+        // that session would just drop the user straight into the
+        // dashboard, and there'd be no way to actually set a password for
+        // next time. Supabase fires this same event for both invite
+        // acceptance and password recovery.
+        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        if (event === 'PASSWORD_RECOVERY' || hash.includes('type=invite') || hash.includes('type=recovery')) {
+          router.replace('/set-password');
+          return;
+        }
         setSession(newSession);
         if (!newSession) router.replace('/login');
       }
