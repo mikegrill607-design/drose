@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { sendWhatsAppTemplate } from '../lib/whatsappTemplates';
 import { getAppSettings } from '../lib/appSettings';
@@ -104,6 +105,7 @@ async function runFollowUpSweep(): Promise<void> {
       await processConversation(conversation as Conversation);
     } catch (err) {
       console.error('follow-up processing failed for', conversation.id, err);
+      Sentry.captureException(err);
     }
   }
 }
@@ -111,6 +113,9 @@ async function runFollowUpSweep(): Promise<void> {
 export function startFollowUpCron(): void {
   // Hourly, in-process -- no separate paid scheduler tier needed (spec Section 10).
   cron.schedule('0 * * * *', () => {
-    runFollowUpSweep().catch((err) => console.error('follow-up sweep crashed', err));
+    runFollowUpSweep().catch((err) => {
+      console.error('follow-up sweep crashed', err);
+      Sentry.captureException(err);
+    });
   });
 }

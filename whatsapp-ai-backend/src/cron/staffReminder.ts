@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { notifyStaff } from '../lib/staffNotify';
 import { Conversation } from '../types';
@@ -57,6 +58,7 @@ async function runStaffReminderSweep(): Promise<void> {
       await remindConversation(conversation as Conversation);
     } catch (err) {
       console.error('staff reminder failed for', conversation.id, err);
+      Sentry.captureException(err);
     }
   }
 }
@@ -65,6 +67,9 @@ export function startStaffReminderCron(): void {
   // Every 6 hours -- frequent enough to catch the 2-day threshold promptly
   // without needing anything more granular than the follow-up cron's own cadence.
   cron.schedule('0 */6 * * *', () => {
-    runStaffReminderSweep().catch((err) => console.error('staff reminder sweep crashed', err));
+    runStaffReminderSweep().catch((err) => {
+      console.error('staff reminder sweep crashed', err);
+      Sentry.captureException(err);
+    });
   });
 }

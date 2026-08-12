@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { getTemplateStatus } from '../lib/whatsappTemplates';
 
@@ -34,12 +35,16 @@ async function pollPendingTemplates(): Promise<void> {
         .eq('id', template.id);
     } catch (err) {
       console.error('template status poll failed for', template.id, err);
+      Sentry.captureException(err);
     }
   }
 }
 
 export function startTemplateStatusCron(): void {
   cron.schedule('*/30 * * * *', () => {
-    pollPendingTemplates().catch((err) => console.error('template status poll crashed', err));
+    pollPendingTemplates().catch((err) => {
+      console.error('template status poll crashed', err);
+      Sentry.captureException(err);
+    });
   });
 }

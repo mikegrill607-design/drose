@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { Sentry } from './lib/sentry'; // must init before other imports that might throw during setup
 import express from 'express';
 import cors from 'cors';
 import { webhookRouter } from './routes/webhook';
@@ -63,6 +64,24 @@ app.use('/size-chart', apiLimiter, requireStaffAuth, sizeChartRouter);
 app.use('/system-prompt', apiLimiter, requireStaffAuth, systemPromptRouter);
 app.use('/settings', apiLimiter, requireStaffAuth, settingsRouter);
 app.use('/templates', apiLimiter, requireStaffAuth, templatesRouter);
+
+// Catches anything thrown/rejected inside a route handler that wasn't
+// already caught locally -- reports it to Sentry (a no-op if SENTRY_DSN
+// isn't set) before Express's own default handler sends the response.
+Sentry.setupExpressErrorHandler(app);
+
+// Crons and webhook processing run outside any request/response cycle, so
+// an error in the middle of async work there wouldn't hit Express's error
+// handler at all -- these two are the actual process-level safety net for
+// "this crashed and nobody logged why."
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+  Sentry.captureException(reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  Sentry.captureException(err);
+});
 
 ensureChatMediaBucket();
 startFollowUpCron();

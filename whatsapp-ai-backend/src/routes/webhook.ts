@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Request, Router } from 'express';
+import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { getAppSettings } from '../lib/appSettings';
 import { sendWhatsAppMessage, sendWhatsAppImage, downloadWhatsAppMedia } from '../lib/whatsapp';
@@ -85,6 +86,7 @@ webhookRouter.post('/', async (req, res) => {
           await processInboundMessage(messages[i], value?.contacts?.[i]?.profile?.name);
         } catch (err) {
           console.error('webhook message processing failed', err);
+          Sentry.captureException(err);
         }
       }
 
@@ -100,6 +102,7 @@ webhookRouter.post('/', async (req, res) => {
           await processStatusUpdate(status);
         } catch (err) {
           console.error('webhook status processing failed', err);
+          Sentry.captureException(err);
         }
       }
     }
