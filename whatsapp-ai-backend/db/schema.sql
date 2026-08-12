@@ -9,8 +9,9 @@ create table conversations (
   customer_name text,
   detected_language text, -- 'ms' | 'en'
   status text not null default 'ai_active', -- ai_active | awaiting_staff | staff_handling
-  follow_up_enabled boolean not null default false,
-  follow_up_stage int not null default 0, -- 0=none,1=day1,2=day3,3=day7
+  follow_up_enabled boolean not null default true, -- automatic for every lead by default; staff can opt a conversation out
+  follow_up_stage int not null default 0, -- 0=none, 1=first follow-up sent, 2=second (final) follow-up sent
+  follow_up_last_sent_at timestamptz, -- when stage 1 was actually sent -- stage 2's 2-day wait is measured from this, not from last_customer_message_at
   last_customer_message_at timestamptz,
   last_ai_or_staff_message_at timestamptz,
   staff_reminder_sent boolean not null default false, -- one nudge per untouched handoff, see cron/staffReminder.ts

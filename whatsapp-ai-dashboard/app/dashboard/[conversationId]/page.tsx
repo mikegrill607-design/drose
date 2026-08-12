@@ -298,7 +298,7 @@ export default function ConversationPage({
               checked={conversation.follow_up_enabled}
               onChange={handleToggleFollowUp}
             />
-            Auto follow-up (Day 1 / 3 / 7)
+            Auto follow-up (2-stage, on by default)
           </label>
           <input
             value={followUpText}

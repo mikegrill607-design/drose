@@ -6,9 +6,12 @@ import { backendApi } from '@/lib/api';
 import { WhatsAppTemplate } from '@/lib/types';
 
 const STAGES: { key: string; label: string; hint: string }[] = [
-  { key: 'followup_day1_template', label: 'Day 1', hint: 'Sent 1 day after the customer went quiet.' },
-  { key: 'followup_day3_template', label: 'Day 3', hint: 'Sent 3 days after, if they still haven’t replied.' },
-  { key: 'followup_day7_template', label: 'Day 7', hint: 'Last one -- auto-disables the sequence for that customer after this.' },
+  { key: 'followup_stage1_template', label: 'Follow-up 1', hint: 'Sent 1 day after the customer went quiet.' },
+  {
+    key: 'followup_stage2_template',
+    label: 'Follow-up 2',
+    hint: 'Last one -- sent 2 days after follow-up 1 went out (if they still haven’t replied), then the sequence ends.',
+  },
 ];
 
 export default function FollowUpPage() {
@@ -60,13 +63,15 @@ export default function FollowUpPage() {
     <div className="mx-auto max-w-3xl p-6">
       <h1 className="mb-1 text-lg font-semibold text-neutral-900">Follow-Up Messages</h1>
       <p className="mb-6 text-sm text-neutral-500">
-        The automatic Day 1 / 3 / 7 sequence, sent to customers who go quiet -- enabled per-conversation from the
-        chat view. Sent in whichever language the AI detected for that customer.
+        Automatic 2-stage sequence for leads who go quiet -- runs for every conversation that showed real interest
+        by default, no need to turn it on per customer. Staff can still switch it off for a specific conversation
+        from the chat view. Sent in whichever language the AI detected for that customer, and every send updates
+        the lead&apos;s status in your Google Sheet.
       </p>
 
       {!hasAnyApproved && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          No approved templates yet. Day 1/3/7 sends happen outside Meta&apos;s 24-hour reply window, so they always
+          No approved templates yet. Follow-up sends happen outside Meta&apos;s 24-hour reply window, so they always
           need a pre-approved template -- free text won&apos;t work here. Create and submit one on the{' '}
           <Link href="/dashboard/templates" className="font-medium underline">
             Templates

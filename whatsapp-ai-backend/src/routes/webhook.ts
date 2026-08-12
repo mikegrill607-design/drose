@@ -167,11 +167,15 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       wa_message_id: waMessageId,
     });
 
-    // Any inbound message cancels a pending follow-up sequence (spec Section 10.6).
-    if (conversation.follow_up_enabled || conversation.follow_up_stage !== 0) {
+    // Any inbound message cancels a pending follow-up sequence -- but does
+    // NOT disable follow-up entirely, since it's automatic-by-default now
+    // (spec Section 10.6). If they go quiet again later, the sequence
+    // should restart from stage 1, not stay off just because staff never
+    // manually re-enabled it.
+    if (conversation.follow_up_stage !== 0 || conversation.follow_up_last_sent_at) {
       await supabase
         .from('conversations')
-        .update({ follow_up_enabled: false, follow_up_stage: 0 })
+        .update({ follow_up_stage: 0, follow_up_last_sent_at: null })
         .eq('id', conversation.id);
     }
 

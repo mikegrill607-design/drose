@@ -10,6 +10,7 @@ export interface Conversation {
   status: ConversationStatus;
   follow_up_enabled: boolean;
   follow_up_stage: number;
+  follow_up_last_sent_at: string | null;
   last_customer_message_at: string | null;
   last_ai_or_staff_message_at: string | null;
   staff_reminder_sent: boolean;

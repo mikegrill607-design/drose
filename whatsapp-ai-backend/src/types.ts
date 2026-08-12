@@ -10,6 +10,7 @@ export interface Conversation {
   status: ConversationStatus;
   follow_up_enabled: boolean;
   follow_up_stage: number;
+  follow_up_last_sent_at: string | null;
   last_customer_message_at: string | null;
   last_ai_or_staff_message_at: string | null;
   staff_reminder_sent: boolean;
@@ -94,16 +95,16 @@ export type AppSettingKey =
   | 'llm_provider' // 'groq' | 'openai'
   | 'llm_api_key'
   | 'llm_model' // optional override; defaults per-provider in src/lib/ai.ts
-  // Which approved whatsapp_templates.name to send for each automatic
-  // follow-up stage, per language -- Day 1/3/7 sends always happen outside
+  // Which approved whatsapp_templates.name to send for each of the two
+  // follow-up stages, per language -- these sends always happen outside
   // Meta's 24-hour session window, so free text isn't an option here, only
-  // a pre-approved template. See src/routes/templates.ts.
-  | 'followup_day1_template_ms'
-  | 'followup_day1_template_en'
-  | 'followup_day3_template_ms'
-  | 'followup_day3_template_en'
-  | 'followup_day7_template_ms'
-  | 'followup_day7_template_en'
+  // a pre-approved template. Stage 1 fires 24h after the customer's last
+  // message; stage 2 fires 2 days after stage 1 was actually sent (not from
+  // the original message). See src/cron/followUp.ts.
+  | 'followup_stage1_template_ms'
+  | 'followup_stage1_template_en'
+  | 'followup_stage2_template_ms'
+  | 'followup_stage2_template_en'
   // Google Apps Script Web App URL -- each qualified lead (handoff trigger)
   // gets POSTed here so it lands as a row in the owner's own Google Sheet.
   // See src/lib/googleSheets.ts.

@@ -3,30 +3,40 @@ import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { sendWhatsAppTemplate } from '../lib/whatsappTemplates';
 import { getAppSettings } from '../lib/appSettings';
+import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { AppSettingKey, Conversation } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const STAGE_1_DELAY_MS = 1 * DAY_MS; // from the customer's last message
+const STAGE_2_DELAY_MS = 2 * DAY_MS; // from when stage 1 was actually sent
 
 // Which app_settings key holds the approved template name for each stage,
-// per language. Day 1/3/7 sends always happen outside Meta's 24-hour
-// session window, so a pre-approved template is required -- free text is
-// rejected by Meta at this point, not just discouraged.
-const STAGE_TEMPLATE_KEYS: Record<1 | 2 | 3, { ms: AppSettingKey; en: AppSettingKey }> = {
-  1: { ms: 'followup_day1_template_ms', en: 'followup_day1_template_en' },
-  2: { ms: 'followup_day3_template_ms', en: 'followup_day3_template_en' },
-  3: { ms: 'followup_day7_template_ms', en: 'followup_day7_template_en' },
+// per language. These sends always happen outside Meta's 24-hour session
+// window, so a pre-approved template is required -- free text is rejected
+// by Meta at this point, not just discouraged.
+const STAGE_TEMPLATE_KEYS: Record<1 | 2, { ms: AppSettingKey; en: AppSettingKey }> = {
+  1: { ms: 'followup_stage1_template_ms', en: 'followup_stage1_template_en' },
+  2: { ms: 'followup_stage2_template_ms', en: 'followup_stage2_template_en' },
 };
 
 async function processConversation(conversation: Conversation): Promise<void> {
   if (!conversation.last_customer_message_at) return;
 
-  const daysSince =
-    (Date.now() - new Date(conversation.last_customer_message_at).getTime()) / DAY_MS;
+  const now = Date.now();
+  let nextStage: 1 | 2 | null = null;
 
-  let nextStage: 1 | 2 | 3 | null = null;
-  if (conversation.follow_up_stage === 0 && daysSince >= 1) nextStage = 1;
-  else if (conversation.follow_up_stage === 1 && daysSince >= 3) nextStage = 2;
-  else if (conversation.follow_up_stage === 2 && daysSince >= 7) nextStage = 3;
+  if (conversation.follow_up_stage === 0) {
+    if (now - new Date(conversation.last_customer_message_at).getTime() >= STAGE_1_DELAY_MS) nextStage = 1;
+  } else if (conversation.follow_up_stage === 1) {
+    // Measured from when stage 1 was actually sent, not the original
+    // message -- a customer who goes quiet, gets stage 1, then stays quiet
+    // should get stage 2 exactly 2 days after that stage 1 send, regardless
+    // of how long they'd already been quiet before it went out.
+    const sentAt = conversation.follow_up_last_sent_at
+      ? new Date(conversation.follow_up_last_sent_at).getTime()
+      : new Date(conversation.last_customer_message_at).getTime();
+    if (now - sentAt >= STAGE_2_DELAY_MS) nextStage = 2;
+  }
 
   if (!nextStage) return;
 
@@ -65,6 +75,8 @@ async function processConversation(conversation: Conversation): Promise<void> {
     return;
   }
 
+  const nowIso = new Date().toISOString();
+
   await supabase.from('messages').insert({
     conversation_id: conversation.id,
     sender: 'ai',
@@ -83,17 +95,38 @@ async function processConversation(conversation: Conversation): Promise<void> {
     .from('conversations')
     .update({
       follow_up_stage: nextStage,
-      follow_up_enabled: nextStage === 3 ? false : conversation.follow_up_enabled,
+      follow_up_last_sent_at: nowIso,
+      // Stage 2 is the last one -- nothing more to send after this.
+      follow_up_enabled: nextStage === 2 ? false : conversation.follow_up_enabled,
     })
     .eq('id', conversation.id);
+
+  // Every send is reflected in the owner's Google Sheet so a lead's status
+  // shows exactly where it is in the sequence, not just "New" forever.
+  await sendLeadToGoogleSheets({
+    customerName: conversation.customer_name,
+    customerPhone: conversation.customer_phone,
+    product: '',
+    details: '',
+    lastMessage: '',
+    status: nextStage === 1 ? 'Follow-up 1 sent — awaiting reply' : 'Follow-up 2 sent — awaiting reply',
+  });
 }
 
 async function runFollowUpSweep(): Promise<void> {
+  // Only leads who've already shown real interest get chased -- not every
+  // one-off "hi" a conversation ever received. lead_logged_to_sheets is
+  // already the signal for "this customer showed real interest" (see
+  // routes/webhook.ts), reused here rather than inventing a second one.
+  // sale_outcome null excludes anyone already marked purchased/not-purchased
+  // -- no point following up on a decided deal.
   const { data: conversations, error } = await supabase
     .from('conversations')
     .select('*')
     .eq('follow_up_enabled', true)
-    .lt('follow_up_stage', 3);
+    .eq('lead_logged_to_sheets', true)
+    .is('sale_outcome', null)
+    .lt('follow_up_stage', 2);
 
   if (error) {
     console.error('follow-up sweep query failed', error);

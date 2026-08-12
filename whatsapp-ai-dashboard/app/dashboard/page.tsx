@@ -164,7 +164,7 @@ export default function ConversationListPage() {
                       handleToggleFollowUp(c.id, !c.follow_up_enabled);
                     }}
                     disabled={busyConvId === c.id}
-                    title="Auto follow-up (Day 1 / 3 / 7)"
+                    title="Auto follow-up (2-stage, on by default)"
                     className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50 ${
                       c.follow_up_enabled
                         ? 'border-blue-300 bg-blue-50 text-blue-700'
@@ -246,8 +246,8 @@ export default function ConversationListPage() {
                           disabled={busyConvId === c.id}
                           title={
                             c.follow_up_enabled
-                              ? 'Auto follow-up (Day 1/3/7) is ON -- click to turn off'
-                              : 'Auto follow-up (Day 1/3/7) is OFF -- click to turn on'
+                              ? 'Auto follow-up (2-stage) is ON -- click to turn off'
+                              : 'Auto follow-up (2-stage) is OFF -- click to turn on'
                           }
                           className={`rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
                             c.follow_up_enabled

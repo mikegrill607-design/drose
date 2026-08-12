@@ -15,12 +15,10 @@ const STAFF_ALERT_TEMPLATE_KEYS: AppSettingKey[] = ['staff_handoff_template', 's
 
 // Which approved template to use for each Day 1/3/7 stage, per language.
 const FOLLOW_UP_TEMPLATE_KEYS: AppSettingKey[] = [
-  'followup_day1_template_ms',
-  'followup_day1_template_en',
-  'followup_day3_template_ms',
-  'followup_day3_template_en',
-  'followup_day7_template_ms',
-  'followup_day7_template_en',
+  'followup_stage1_template_ms',
+  'followup_stage1_template_en',
+  'followup_stage2_template_ms',
+  'followup_stage2_template_en',
 ];
 
 export const settingsRouter = Router();
