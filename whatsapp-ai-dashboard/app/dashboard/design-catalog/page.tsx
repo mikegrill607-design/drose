@@ -17,6 +17,7 @@ export default function DesignCatalogPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [searchCode, setSearchCode] = useState('');
 
   async function loadAll() {
     const [catalog, kb] = await Promise.all([
@@ -94,6 +95,12 @@ export default function DesignCatalogPage() {
     }));
   }, [entries]);
 
+  const visibleGroups = useMemo(() => {
+    const needle = searchCode.trim().toLowerCase();
+    if (!needle) return groups;
+    return groups.filter((g) => g.designCode.toLowerCase().includes(needle));
+  }, [groups, searchCode]);
+
   return (
     <div className="p-6">
       <h1 className="mb-1 text-lg font-semibold text-neutral-900">Design Catalog</h1>
@@ -165,13 +172,34 @@ export default function DesignCatalogPage() {
         {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
       </div>
 
+      {!loading && groups.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            placeholder="Search by design code (e.g. SPE A1)"
+            value={searchCode}
+            onChange={(e) => setSearchCode(e.target.value)}
+            className="w-full max-w-xs rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400"
+          />
+          {searchCode && (
+            <button onClick={() => setSearchCode('')} className="text-xs text-neutral-500 hover:underline">
+              Clear
+            </button>
+          )}
+          <span className="text-xs text-neutral-400">
+            {visibleGroups.length} of {groups.length} design{groups.length === 1 ? '' : 's'}
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : groups.length === 0 ? (
         <p className="text-sm text-neutral-500">No designs uploaded yet.</p>
+      ) : visibleGroups.length === 0 ? (
+        <p className="text-sm text-neutral-500">No designs match &quot;{searchCode}&quot;.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {groups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.key} className="rounded-lg border border-neutral-200 bg-white p-3">
               <div className="mb-2 flex items-start justify-between">
                 <div>

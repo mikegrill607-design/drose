@@ -8,7 +8,7 @@ import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
-import { designCatalogHasEntriesForTopic, getNextDesignBatch, deactivateDesign, DesignGroup } from '../lib/designCatalog';
+import { designCatalogHasEntriesForTopic, getNextDesignBatch, DesignGroup } from '../lib/designCatalog';
 import { getSizeChartImages } from '../lib/sizeChart';
 import { getActivePaymentMethods, findPaymentMethod } from '../lib/paymentMethods';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
@@ -301,12 +301,6 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
             .from('conversations')
             .update({ payment_method_chosen: method.method_name })
             .eq('id', conversation.id);
-
-          // Most designs are one-of-a-kind -- as soon as a customer commits
-          // to buying it (picks a payment method, QR sent), it must stop
-          // being offered to anyone else. Staff can flip it back on from the
-          // Design Catalog page manually if this particular sale falls through.
-          await deactivateDesign(topMatch.topic, conversation.chosen_design_code);
 
           const details = [`kod design: ${conversation.chosen_design_code}`, `payment: ${method.method_name}`];
           await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
