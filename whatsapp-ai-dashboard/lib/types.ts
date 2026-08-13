@@ -18,6 +18,8 @@ export interface Conversation {
   sale_outcome: 'purchased' | 'not_purchased' | null;
   sent_design_codes: string[];
   sent_size_chart: boolean;
+  chosen_design_code: string | null;
+  payment_method_chosen: string | null;
   created_at: string;
 }
 
@@ -73,6 +75,18 @@ export interface SizeChartImage {
   product_topic: string; // matches KnowledgeBaseEntry.topic
   label: string | null;
   image_url: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Not product-specific -- one flat list shared across whichever products
+// use the "choose design, then choose payment method" flow.
+export interface PaymentMethod {
+  id: string;
+  method_name: string; // e.g. "Maybank", "Bank Islam"
+  account_holder: string | null;
+  account_number: string | null;
+  image_url: string; // the QR code image
   is_active: boolean;
   created_at: string;
 }

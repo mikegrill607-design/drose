@@ -24,6 +24,7 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
       { href: '/dashboard/knowledge-base', label: 'Knowledge Base', icon: '📚' },
       { href: '/dashboard/design-catalog', label: 'Design Catalog', icon: '🖼️' },
       { href: '/dashboard/size-chart', label: 'Size Chart', icon: '📏' },
+      { href: '/dashboard/payment-methods', label: 'Payment Methods', icon: '💳' },
       { href: '/dashboard/system-prompt', label: 'System Prompt', icon: '📝' },
       { href: '/dashboard/follow-up', label: 'Follow-Up Messages', icon: '🔔' },
       { href: '/dashboard/templates', label: 'Templates', icon: '💬' },

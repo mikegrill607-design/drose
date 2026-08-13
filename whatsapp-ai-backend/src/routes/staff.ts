@@ -180,9 +180,19 @@ staffRouter.post('/handback', async (req, res) => {
     return;
   }
 
+  // Clears the kain-pasang browsing/payment state too -- otherwise the AI
+  // would resume thinking a design/payment method was already chosen from
+  // whatever happened before staff took over, even if that flow finished,
+  // stalled, or the customer's now asking about something else entirely.
   const { error } = await supabase
     .from('conversations')
-    .update({ status: 'ai_active', staff_reminder_sent: false })
+    .update({
+      status: 'ai_active',
+      staff_reminder_sent: false,
+      sent_design_codes: [],
+      chosen_design_code: null,
+      payment_method_chosen: null,
+    })
     .eq('id', conversationId);
 
   if (error) {

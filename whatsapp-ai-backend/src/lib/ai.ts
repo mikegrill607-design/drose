@@ -90,6 +90,15 @@ export interface ExtractedAttributes {
   sleeve: string | null;
   color: string | null;
   material: string | null;
+  // Design-catalog browsing state (kain-pasang style products only) -- see
+  // webhook.ts. True if the customer's latest reply indicates they'd like to
+  // see more design options instead of picking from what's already shown.
+  wantsMoreDesigns: boolean;
+  // Which payment method the customer named, in their own words (e.g.
+  // "maybank", "bank islam") -- null until they've actually answered the
+  // "which payment method" question. Only meaningful once a design code has
+  // already been chosen.
+  paymentMethod: string | null;
 }
 
 const ATTRIBUTES_DELIMITER = '###ATTRIBUTES###';
@@ -103,7 +112,10 @@ const ATTRIBUTES_DELIMITER = '###ATTRIBUTES###';
 // system trying to re-derive it from raw text with regex.
 const ATTRIBUTE_EXTRACTION_INSTRUCTION = `
 ---
-After writing your reply above, on a new line output exactly "${ATTRIBUTES_DELIMITER}" followed by a single-line JSON object capturing what the CUSTOMER has stated so far in this whole conversation (not just their latest message) for these four attributes: size, sleeve (short/long), color, material. Use a short value in the customer's own words for each one they've given, or null if not given yet. Interpret typos and casual phrasing normally (e.g. "pemdek" means "pendek"). Only fill a field once they've clearly specified it -- never guess or default one. Example: ${ATTRIBUTES_DELIMITER}\n{"size":"M","sleeve":"short","color":null,"material":null}
+After writing your reply above, on a new line output exactly "${ATTRIBUTES_DELIMITER}" followed by a single-line JSON object capturing what the CUSTOMER has stated so far in this whole conversation (not just their latest message) for these fields: size, sleeve (short/long), color, material, wantsMoreDesigns, paymentMethod. Use a short value in the customer's own words for each one they've given, or null if not given yet. Interpret typos and casual phrasing normally (e.g. "pemdek" means "pendek"). Only fill a field once they've clearly specified it -- never guess or default one.
+wantsMoreDesigns: true only if the customer was just shown some design photos and their latest reply says they don't like these / want to see other options (e.g. "takde lain ke", "show me more", "tak berkenan") -- otherwise false.
+paymentMethod: only fill this in if you had just asked the customer which payment method they prefer and their latest reply names one (e.g. "maybank", "bank islam") -- otherwise null.
+Example: ${ATTRIBUTES_DELIMITER}\n{"size":"M","sleeve":"short","color":null,"material":null,"wantsMoreDesigns":false,"paymentMethod":null}
 This JSON line is read by code and never shown to the customer.`;
 
 function parseCompletion(raw: string): { reply: string; extractedAttributes: ExtractedAttributes | null } {
@@ -123,6 +135,8 @@ function parseCompletion(raw: string): { reply: string; extractedAttributes: Ext
         sleeve: parsed.sleeve ?? null,
         color: parsed.color ?? null,
         material: parsed.material ?? null,
+        wantsMoreDesigns: parsed.wantsMoreDesigns === true,
+        paymentMethod: parsed.paymentMethod ?? null,
       },
     };
   } catch {

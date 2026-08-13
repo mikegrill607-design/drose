@@ -1,11 +1,12 @@
 import { supabase } from './supabase';
 import { DesignCatalogEntry } from '../types';
 
-// A "New handoff" storm of 15+ images in one WhatsApp message would be a
-// bad customer experience and a lot of wasted media-message cost -- cap how
-// many distinct design codes get sent at once. Each code can still bring
-// its own 2-3 photos.
-const MAX_DESIGN_CODES_PER_SEND = 5;
+// How many distinct design codes get sent per batch -- a "New handoff"
+// storm of 15+ images in one WhatsApp message would be a bad customer
+// experience and a lot of wasted media-message cost. Customers see this
+// many at a time, then can ask for more. Each code can still bring its own
+// 2-3 photos.
+export const DESIGN_BATCH_SIZE = 3;
 
 export interface DesignGroup {
   designCode: string;
@@ -27,16 +28,7 @@ function tagMatches(tag: string | null, needle: string): boolean {
   return tagNorm.includes(needle) || needle.includes(tagNorm);
 }
 
-// Case-insensitive, tolerant of partial matches in either direction (the
-// customer's free-text preference vs. the owner's free-text tag on each
-// design) -- e.g. customer says "pastel" and a design is tagged "Pastel
-// Pink". Falls back to every active design for the topic if nothing
-// matches, rather than showing the customer nothing at all.
-export async function getMatchingDesignGroups(
-  topic: string,
-  material: string | null,
-  color: string | null
-): Promise<DesignGroup[]> {
+async function groupsForTopic(topic: string, material: string | null, color: string | null): Promise<DesignGroup[]> {
   const { data } = await supabase
     .from('design_catalog')
     .select('*')
@@ -61,7 +53,35 @@ export async function getMatchingDesignGroups(
     groups.set(entry.design_code, list);
   }
 
-  return Array.from(groups.entries())
-    .slice(0, MAX_DESIGN_CODES_PER_SEND)
-    .map(([designCode, imageUrls]) => ({ designCode, imageUrls }));
+  return Array.from(groups.entries()).map(([designCode, imageUrls]) => ({ designCode, imageUrls }));
+}
+
+export interface DesignBatch {
+  groups: DesignGroup[];
+  hasMore: boolean;
+}
+
+// Case-insensitive, tolerant of partial matches in either direction (the
+// customer's free-text preference vs. the owner's free-text tag on each
+// design) -- e.g. customer says "pastel" and a design is tagged "Pastel
+// Pink". Falls back to every active design for the topic if nothing
+// matches, rather than showing the customer nothing at all.
+//
+// alreadyShownCodes excludes codes the customer has already been shown (in
+// an earlier batch this same conversation) so "show me more" advances
+// through the catalog instead of repeating itself.
+export async function getNextDesignBatch(
+  topic: string,
+  material: string | null,
+  color: string | null,
+  alreadyShownCodes: string[]
+): Promise<DesignBatch> {
+  const all = await groupsForTopic(topic, material, color);
+  const shown = new Set(alreadyShownCodes);
+  const remaining = all.filter((g) => !shown.has(g.designCode));
+
+  return {
+    groups: remaining.slice(0, DESIGN_BATCH_SIZE),
+    hasMore: remaining.length > DESIGN_BATCH_SIZE,
+  };
 }

@@ -6,7 +6,7 @@
 // these routes would be wide open to anyone who finds the Railway URL.
 
 import { getSupabaseClient } from './supabaseClient';
-import { DesignCatalogEntry, KnowledgeBaseEntry, SizeChartImage, WhatsAppTemplate } from './types';
+import { DesignCatalogEntry, KnowledgeBaseEntry, PaymentMethod, SizeChartImage, WhatsAppTemplate } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL ?? '';
 
@@ -244,4 +244,27 @@ export const backendApi = {
     backendFetch<SizeChartImage>(`/size-chart/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
 
   deleteSizeChartImage: (id: string) => backendFetch(`/size-chart/${id}`, { method: 'DELETE' }),
+
+  getPaymentMethods: () => backendFetch<PaymentMethod[]>('/payment-methods'),
+
+  uploadPaymentMethod: (input: {
+    methodName: string;
+    accountHolder?: string;
+    accountNumber?: string;
+    file: File;
+  }) => {
+    const formData = new FormData();
+    formData.append('method_name', input.methodName);
+    if (input.accountHolder) formData.append('account_holder', input.accountHolder);
+    if (input.accountNumber) formData.append('account_number', input.accountNumber);
+    formData.append('file', input.file);
+    return backendUpload<PaymentMethod>('/payment-methods/upload', formData);
+  },
+
+  updatePaymentMethod: (
+    id: string,
+    updates: { method_name?: string; account_holder?: string; account_number?: string; is_active?: boolean }
+  ) => backendFetch<PaymentMethod>(`/payment-methods/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
+
+  deletePaymentMethod: (id: string) => backendFetch(`/payment-methods/${id}`, { method: 'DELETE' }),
 };

@@ -8,8 +8,9 @@ import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
-import { designCatalogHasEntriesForTopic, getMatchingDesignGroups } from '../lib/designCatalog';
+import { designCatalogHasEntriesForTopic, getNextDesignBatch, DesignGroup } from '../lib/designCatalog';
 import { getSizeChartImages } from '../lib/sizeChart';
+import { getActivePaymentMethods, findPaymentMethod } from '../lib/paymentMethods';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { notifyStaff } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
@@ -258,32 +259,50 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
 
     // Design-catalog products (kain-pasang style) are a deliberate exception
     // to "AI never sends photos" -- the AI sends the actual design-code
-    // photos itself once material/color is known, and staff only step in
-    // once the customer names a code to reserve stock + send payment info.
-    // Products with no catalog rows (e.g. Kemeja) fall through to the
+    // photos itself once material is known, then walks the customer through
+    // picking a payment method and sends the matching QR code too. Staff
+    // only step in at the end, to confirm the booking once payment's been
+    // sent. Products with no catalog rows (e.g. Kemeja) fall through to the
     // regular generic 2-of-4 attribute handoff below unchanged.
     const hasDesignCatalog = topMatch ? await designCatalogHasEntriesForTopic(topMatch.topic) : false;
 
     if (hasDesignCatalog && topMatch) {
-      const alreadyShownCodes = conversation.sent_design_codes;
+      if (conversation.chosen_design_code) {
+        // Stage 3: a design's already been picked -- this reply should be their payment method choice.
+        const paymentAnswer = ai.extractedAttributes?.paymentMethod ?? null;
+        const method = paymentAnswer ? await findPaymentMethod(paymentAnswer) : null;
 
-      if (alreadyShownCodes.length > 0) {
-        const chosenCode = alreadyShownCodes.find((code) => text.toLowerCase().includes(code.toLowerCase()));
-        if (chosenCode) {
-          const handoffMessage =
-            language === 'ms'
-              ? `Terima kasih! Staff kami akan sahkan design ${chosenCode} dan hantar butiran pembayaran sekejap lagi ya 😊`
-              : `Thank you! Our team will confirm design ${chosenCode} and send payment details shortly 😊`;
-
-          const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
+        if (method) {
+          const qrCaption = [method.method_name, method.account_holder, method.account_number]
+            .filter(Boolean)
+            .join(' — ');
+          const qrSentId = await sendWhatsAppImage(customerPhone, method.image_url, qrCaption);
           await supabase.from('messages').insert({
             conversation_id: conversation.id,
             sender: 'ai',
-            content: handoffMessage,
-            wa_message_id: sentId,
+            content: qrCaption,
+            media_url: method.image_url,
+            wa_message_id: qrSentId,
           });
 
-          const details = [`kod design: ${chosenCode}`];
+          const confirmMessage =
+            language === 'ms'
+              ? `Terima kasih! Sila buat pembayaran menggunakan QR code di atas, dan hantar resit selepas bayar ya. Staff kami akan sahkan design ${conversation.chosen_design_code} sekejap lagi 😊`
+              : `Thank you! Please pay using the QR code above and send the receipt once done. Our team will confirm design ${conversation.chosen_design_code} shortly 😊`;
+          const confirmSentId = await sendWhatsAppMessage(customerPhone, confirmMessage);
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            sender: 'ai',
+            content: confirmMessage,
+            wa_message_id: confirmSentId,
+          });
+
+          await supabase
+            .from('conversations')
+            .update({ payment_method_chosen: method.method_name })
+            .eq('id', conversation.id);
+
+          const details = [`kod design: ${conversation.chosen_design_code}`, `payment: ${method.method_name}`];
           await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
           await sendLeadToGoogleSheets({
             customerName: conversation.customer_name,
@@ -291,37 +310,92 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
             product: productGuess ?? 'Kain Pasang',
             details: details.join(', '),
             lastMessage: text,
-            status: 'Qualified — handed to staff',
+            status: 'Qualified — payment sent, awaiting confirmation',
           });
           if (!conversation.lead_logged_to_sheets) {
             await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
           }
           return;
         }
-        // Designs already sent, no code named yet -- fall through to a normal reply.
-      } else {
-        const material = ai.extractedAttributes?.material ?? null;
-        const color = ai.extractedAttributes?.color ?? null;
+        // Haven't named a recognized payment method yet -- fall through to a
+        // normal reply so the AI can re-ask, per the system prompt.
+      } else if (conversation.sent_design_codes.length > 0) {
+        // Stage 2: at least one batch already shown -- did they pick one, or ask for more?
+        const chosenCode = conversation.sent_design_codes.find((code) =>
+          text.toLowerCase().includes(code.toLowerCase())
+        );
 
-        if (material || color) {
-          const groups = await getMatchingDesignGroups(topMatch.topic, material, color);
-          if (groups.length > 0) {
-            for (const group of groups) {
-              for (let i = 0; i < group.imageUrls.length; i++) {
-                const caption = i === 0 ? `Kod Design: ${group.designCode}` : undefined;
-                const sentId = await sendWhatsAppImage(customerPhone, group.imageUrls[i], caption);
-                await supabase.from('messages').insert({
-                  conversation_id: conversation.id,
-                  sender: 'ai',
-                  content: caption ?? '',
-                  media_url: group.imageUrls[i],
-                  wa_message_id: sentId,
-                });
-              }
+        if (chosenCode) {
+          const methods = await getActivePaymentMethods();
+
+          if (methods.length === 0) {
+            // No payment methods configured yet -- fall back to the old
+            // staff-sends-payment-manually flow rather than asking a
+            // question with nothing to answer it.
+            const handoffMessage =
+              language === 'ms'
+                ? `Terima kasih! Staff kami akan sahkan design ${chosenCode} dan hantar butiran pembayaran sekejap lagi ya 😊`
+                : `Thank you! Our team will confirm design ${chosenCode} and send payment details shortly 😊`;
+            const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
+            await supabase.from('messages').insert({
+              conversation_id: conversation.id,
+              sender: 'ai',
+              content: handoffMessage,
+              wa_message_id: sentId,
+            });
+
+            const details = [`kod design: ${chosenCode}`];
+            await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
+            await sendLeadToGoogleSheets({
+              customerName: conversation.customer_name,
+              customerPhone: conversation.customer_phone,
+              product: productGuess ?? 'Kain Pasang',
+              details: details.join(', '),
+              lastMessage: text,
+              status: 'Qualified — handed to staff',
+            });
+            if (!conversation.lead_logged_to_sheets) {
+              await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
             }
+            return;
+          }
+
+          const methodNames = methods.map((m) => m.method_name).join(' / ');
+          const askPaymentMessage =
+            language === 'ms'
+              ? `Bagus, pilihan yang cantik! Untuk design ${chosenCode}, anda nak bayar guna payment method yang mana -- ${methodNames}?`
+              : `Great choice! For design ${chosenCode}, which payment method would you like to use -- ${methodNames}?`;
+          const askSentId = await sendWhatsAppMessage(customerPhone, askPaymentMessage);
+          await supabase.from('messages').insert({
+            conversation_id: conversation.id,
+            sender: 'ai',
+            content: askPaymentMessage,
+            wa_message_id: askSentId,
+          });
+
+          await supabase
+            .from('conversations')
+            .update({ chosen_design_code: chosenCode, last_ai_or_staff_message_at: new Date().toISOString() })
+            .eq('id', conversation.id);
+          return;
+        }
+
+        if (ai.extractedAttributes?.wantsMoreDesigns) {
+          const material = ai.extractedAttributes?.material ?? null;
+          const color = ai.extractedAttributes?.color ?? null;
+          const batch = await getNextDesignBatch(topMatch.topic, material, color, conversation.sent_design_codes);
+
+          if (batch.groups.length > 0) {
+            await sendDesignBatch(conversation.id, customerPhone, batch.groups);
 
             const askMessage =
-              language === 'ms' ? 'Kod design mana yang anda suka? 😊' : 'Which design code do you like? 😊';
+              language === 'ms'
+                ? batch.hasMore
+                  ? 'Design-design ni okay tak? Kalau tak berkenan, saya boleh tunjukkan design lain 😊'
+                  : 'Ini semua design yang ada buat masa ini. Mana satu awak suka? 😊'
+                : batch.hasMore
+                  ? 'Are these designs okay? If not, I can show you more 😊'
+                  : "That's all the designs we currently have available. Which one do you like? 😊";
             const askId = await sendWhatsAppMessage(customerPhone, askMessage);
             await supabase.from('messages').insert({
               conversation_id: conversation.id,
@@ -333,7 +407,56 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
             await supabase
               .from('conversations')
               .update({
-                sent_design_codes: groups.map((g) => g.designCode),
+                sent_design_codes: [...conversation.sent_design_codes, ...batch.groups.map((g) => g.designCode)],
+                last_ai_or_staff_message_at: new Date().toISOString(),
+              })
+              .eq('id', conversation.id);
+          } else {
+            const noMoreMessage =
+              language === 'ms'
+                ? 'Maaf, tiada lagi design lain buat masa ini. Boleh pilih dari design yang telah ditunjukkan tadi? 😊'
+                : "Sorry, there aren't any more designs available right now. Could you pick from the ones already shown? 😊";
+            const noMoreId = await sendWhatsAppMessage(customerPhone, noMoreMessage);
+            await supabase.from('messages').insert({
+              conversation_id: conversation.id,
+              sender: 'ai',
+              content: noMoreMessage,
+              wa_message_id: noMoreId,
+            });
+          }
+          return;
+        }
+        // Designs already sent, no code named and not asking for more -- fall through to a normal reply.
+      } else {
+        // Stage 1: nothing shown yet.
+        const material = ai.extractedAttributes?.material ?? null;
+        const color = ai.extractedAttributes?.color ?? null;
+
+        if (material || color) {
+          const batch = await getNextDesignBatch(topMatch.topic, material, color, []);
+          if (batch.groups.length > 0) {
+            await sendDesignBatch(conversation.id, customerPhone, batch.groups);
+
+            const askMessage =
+              language === 'ms'
+                ? batch.hasMore
+                  ? 'Design-design ni okay tak? Kalau tak berkenan, saya boleh tunjukkan design lain 😊'
+                  : 'Kod design mana yang anda suka? 😊'
+                : batch.hasMore
+                  ? 'Are these designs okay? If not, I can show you more 😊'
+                  : 'Which design code do you like? 😊';
+            const askId = await sendWhatsAppMessage(customerPhone, askMessage);
+            await supabase.from('messages').insert({
+              conversation_id: conversation.id,
+              sender: 'ai',
+              content: askMessage,
+              wa_message_id: askId,
+            });
+
+            await supabase
+              .from('conversations')
+              .update({
+                sent_design_codes: batch.groups.map((g) => g.designCode),
                 last_ai_or_staff_message_at: new Date().toISOString(),
               })
               .eq('id', conversation.id);
@@ -403,6 +526,25 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     .from('conversations')
     .update({ last_ai_or_staff_message_at: new Date().toISOString() })
     .eq('id', conversation.id);
+}
+
+// Sends every photo for a batch of design groups (each code's full shot +
+// close-ups), captioning only the first photo of each code so the code
+// itself is easy to spot without repeating it on every single image.
+async function sendDesignBatch(conversationId: string, customerPhone: string, groups: DesignGroup[]): Promise<void> {
+  for (const group of groups) {
+    for (let i = 0; i < group.imageUrls.length; i++) {
+      const caption = i === 0 ? `Kod Design: ${group.designCode}` : undefined;
+      const sentId = await sendWhatsAppImage(customerPhone, group.imageUrls[i], caption);
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender: 'ai',
+        content: caption ?? '',
+        media_url: group.imageUrls[i],
+        wa_message_id: sentId,
+      });
+    }
+  }
 }
 
 async function upsertConversation(
