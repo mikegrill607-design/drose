@@ -1,7 +1,6 @@
 import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
-import { invalidateAppSettingsCache } from '../lib/appSettings';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { sendWhatsAppTextVerbose } from '../lib/whatsapp';
 import { AppSettingKey } from '../types';
@@ -76,7 +75,6 @@ async function ensureVerifyToken(): Promise<string> {
     .from('app_settings')
     .upsert({ key: 'whatsapp_verify_token', value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' });
   if (upsertError) throw upsertError;
-  invalidateAppSettingsCache();
   return token;
 }
 
@@ -97,7 +95,6 @@ async function upsertSettings(
       );
     if (error) throw error;
   }
-  invalidateAppSettingsCache();
 }
 
 // This router is the only place `app_settings` (which holds the WhatsApp
@@ -137,7 +134,6 @@ settingsRouter.post('/whatsapp/verify-token/regenerate', async (_req, res) => {
       .from('app_settings')
       .upsert({ key: 'whatsapp_verify_token', value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) throw error;
-    invalidateAppSettingsCache();
     res.json({ whatsapp_verify_token: token });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'failed to regenerate token' });

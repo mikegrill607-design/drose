@@ -4,7 +4,7 @@ import { getAppSettings } from './appSettings';
 import { selectRelevantKb } from './kbRouter';
 import { KnowledgeBaseEntry, Message } from '../types';
 
-const HISTORY_LIMIT = 20;
+const HISTORY_LIMIT = 15;
 
 // Groq exposes an OpenAI-compatible endpoint, so both providers can share the
 // same client -- only the base URL, key, and default model differ. Provider
