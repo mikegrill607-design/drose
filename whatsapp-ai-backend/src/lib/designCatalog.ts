@@ -61,6 +61,21 @@ export interface DesignBatch {
   hasMore: boolean;
 }
 
+// Most designs are one-of-a-kind ("One Design, One Owner" -- see Knowledge
+// Base) -- once a customer actually commits to buying one (reaches the
+// payment step), it needs to stop being offered to anyone else immediately,
+// not whenever staff happen to notice and update it by hand. Staff can
+// still reactivate it manually from the Design Catalog page if the sale
+// falls through.
+export async function deactivateDesign(topic: string, designCode: string): Promise<void> {
+  const { error } = await supabase
+    .from('design_catalog')
+    .update({ is_active: false })
+    .eq('product_topic', topic)
+    .eq('design_code', designCode);
+  if (error) console.error('Failed to deactivate sold design', topic, designCode, error);
+}
+
 // Case-insensitive, tolerant of partial matches in either direction (the
 // customer's free-text preference vs. the owner's free-text tag on each
 // design) -- e.g. customer says "pastel" and a design is tagged "Pastel
