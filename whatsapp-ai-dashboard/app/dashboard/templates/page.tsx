@@ -32,6 +32,8 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const placeholderCount = useMemo(() => detectPlaceholderCount(bodyText), [bodyText]);
   // Meta allows the header at most one variable, numbered independently
@@ -106,15 +108,43 @@ export default function TemplatesPage() {
     }
   }
 
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMessage(null);
+    setError(null);
+    try {
+      const result = await backendApi.syncTemplatesFromMeta();
+      setSyncMessage(`Synced ${result.count} template(s) from Meta.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync from Meta');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
 
   return (
     <div className="mx-auto max-w-2xl p-6">
       <h1 className="mb-1 text-lg font-semibold text-neutral-900">Message Templates</h1>
-      <p className="mb-6 text-sm text-neutral-500">
+      <p className="mb-3 text-sm text-neutral-500">
         Required by Meta to message a customer outside the 24-hour reply window (e.g. Day 1/3/7 follow-ups).
-        Save a draft, then submit it for Meta&apos;s review -- approval usually takes minutes to a day.
+        Save a draft, then submit it for Meta&apos;s review -- approval usually takes minutes to a day. This list
+        also auto-refreshes every 30 minutes, and includes templates created directly in Meta&apos;s WhatsApp
+        Manager, not just ones made here.
       </p>
+
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+        >
+          {syncing ? 'Syncing…' : 'Sync from Meta'}
+        </button>
+        {syncMessage && <span className="text-xs text-neutral-500">{syncMessage}</span>}
+      </div>
 
       <div className="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-800">New template</h2>

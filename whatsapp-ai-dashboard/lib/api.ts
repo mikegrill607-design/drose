@@ -156,6 +156,10 @@ export const backendApi = {
 
   deleteTemplate: (id: string) => backendFetch(`/templates/${id}`, { method: 'DELETE' }),
 
+  // Pulls in templates created directly in Meta's WhatsApp Manager (not
+  // through the form below) and refreshes approval status for all of them.
+  syncTemplatesFromMeta: () => backendFetch<{ ok: true; count: number }>('/templates/sync', { method: 'POST' }),
+
   getFollowUpSettings: () => backendFetch<Record<string, string>>('/settings/followup'),
 
   updateFollowUpSettings: (updates: Record<string, string>, staffId?: string) =>

@@ -1,49 +1,17 @@
 import cron from 'node-cron';
 import { Sentry } from '../lib/sentry';
-import { supabase } from '../lib/supabase';
-import { getTemplateStatus } from '../lib/whatsappTemplates';
+import { syncTemplatesFromMeta } from '../routes/templates';
 
 // Meta reviews templates asynchronously and doesn't push a status-change
-// webhook by default, so this polls every pending template's status
+// webhook by default, so this polls the WABA's full template list
 // periodically instead. Runs every 30 minutes -- template review usually
-// takes minutes to a day, no need for anything more frequent.
-async function pollPendingTemplates(): Promise<void> {
-  const { data: pending, error } = await supabase
-    .from('whatsapp_templates')
-    .select('id, meta_template_id')
-    .eq('status', 'pending')
-    .not('meta_template_id', 'is', null);
-
-  if (error) {
-    console.error('template status poll query failed', error);
-    return;
-  }
-
-  for (const template of pending ?? []) {
-    try {
-      const result = await getTemplateStatus(template.meta_template_id as string);
-      const newStatus = result.status.toLowerCase();
-      if (newStatus === 'pending') continue; // no change
-
-      await supabase
-        .from('whatsapp_templates')
-        .update({
-          status: newStatus,
-          rejected_reason: result.rejectedReason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', template.id);
-    } catch (err) {
-      console.error('template status poll failed for', template.id, err);
-      Sentry.captureException(err);
-    }
-  }
-}
-
+// takes minutes to a day, no need for anything more frequent. One list call
+// covers every template regardless of whether it was created through this
+// dashboard or directly in Meta's WhatsApp Manager (see syncTemplatesFromMeta).
 export function startTemplateStatusCron(): void {
   cron.schedule('*/30 * * * *', () => {
-    pollPendingTemplates().catch((err) => {
-      console.error('template status poll crashed', err);
+    syncTemplatesFromMeta().catch((err) => {
+      console.error('template status sync crashed', err);
       Sentry.captureException(err);
     });
   });

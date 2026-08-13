@@ -72,28 +72,100 @@ export async function createMessageTemplate(input: CreateTemplateInput): Promise
   return { metaTemplateId: json.id, status: json.status ?? 'PENDING' };
 }
 
-export interface TemplateStatusResult {
+export interface MetaTemplateSummary {
+  metaTemplateId: string;
+  name: string;
+  language: string;
+  category: string;
   status: string;
   rejectedReason: string | null;
+  headerText: string | null;
+  headerExample: string | null;
+  bodyText: string;
+  variableExamples: string[];
+  footerText: string | null;
 }
 
-// Meta doesn't push approval/rejection via webhook by default, so the status
-// cron polls this periodically for any template still marked "pending".
-export async function getTemplateStatus(metaTemplateId: string): Promise<TemplateStatusResult> {
-  const settings = await getAppSettings();
-  const accessToken = settings.whatsapp_access_token;
-  if (!accessToken) throw new Error('WhatsApp Access Token not configured in Settings');
+interface MetaTemplateComponent {
+  type: string;
+  format?: string;
+  text?: string;
+  example?: { header_text?: string[]; body_text?: string[][] };
+}
 
-  const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${metaTemplateId}?fields=status,rejected_reason`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  const json = (await res.json()) as { status?: string; rejected_reason?: string; error?: { message: string } };
-  if (!res.ok) {
-    throw new Error(json.error?.message || `Failed to fetch template status (HTTP ${res.status})`);
+function parseComponents(components: MetaTemplateComponent[] | undefined): {
+  headerText: string | null;
+  headerExample: string | null;
+  bodyText: string;
+  variableExamples: string[];
+  footerText: string | null;
+} {
+  const header = components?.find((c) => c.type === 'HEADER' && c.format === 'TEXT');
+  const body = components?.find((c) => c.type === 'BODY');
+  const footer = components?.find((c) => c.type === 'FOOTER');
+
+  return {
+    headerText: header?.text ?? null,
+    headerExample: header?.example?.header_text?.[0] ?? null,
+    bodyText: body?.text ?? '',
+    variableExamples: body?.example?.body_text?.[0] ?? [],
+    footerText: footer?.text ?? null,
+  };
+}
+
+// Fetches every template that exists on the WABA in Meta, regardless of
+// whether it was created through this dashboard or directly in Meta's
+// WhatsApp Manager (which staff sometimes find easier for one-off
+// templates) -- so approval status and content stay in sync either way.
+// Paginated since a WABA can have many templates.
+export async function listMetaTemplates(): Promise<MetaTemplateSummary[]> {
+  const settings = await getAppSettings();
+  const wabaId = settings.whatsapp_business_account_id;
+  const accessToken = settings.whatsapp_access_token;
+  if (!wabaId || !accessToken) {
+    throw new Error('WhatsApp Business Account ID or Access Token not configured in Settings');
   }
 
-  return { status: json.status ?? 'PENDING', rejectedReason: json.rejected_reason ?? null };
+  const results: MetaTemplateSummary[] = [];
+  let url: string | null =
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${wabaId}/message_templates?fields=id,name,language,category,status,rejected_reason,components&limit=100`;
+
+  while (url) {
+    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const json = (await res.json()) as {
+      data?: {
+        id: string;
+        name: string;
+        language: string;
+        category: string;
+        status: string;
+        rejected_reason?: string;
+        components?: MetaTemplateComponent[];
+      }[];
+      paging?: { next?: string };
+      error?: { message: string };
+    };
+    if (!res.ok) {
+      throw new Error(json.error?.message || `Failed to fetch templates from Meta (HTTP ${res.status})`);
+    }
+
+    for (const t of json.data ?? []) {
+      const parsed = parseComponents(t.components);
+      results.push({
+        metaTemplateId: t.id,
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        status: t.status,
+        rejectedReason: t.rejected_reason ?? null,
+        ...parsed,
+      });
+    }
+
+    url = json.paging?.next ?? null;
+  }
+
+  return results;
 }
 
 // Sends an approved template message -- the only way to reach a customer

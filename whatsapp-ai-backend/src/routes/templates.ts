@@ -1,8 +1,48 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
-import { createMessageTemplate } from '../lib/whatsappTemplates';
+import { createMessageTemplate, listMetaTemplates } from '../lib/whatsappTemplates';
 
 export const templatesRouter = Router();
+
+// Pulls every template on the WABA from Meta -- including ones created
+// directly in Meta's WhatsApp Manager, which never go through POST /
+// or /:id/submit below -- and upserts them by name so the dashboard (and
+// the Settings "Staff Alert Fallback Templates" dropdown) reflects real
+// approval status without staff having to recreate anything here.
+export async function syncTemplatesFromMeta(): Promise<number> {
+  const metaTemplates = await listMetaTemplates();
+
+  for (const t of metaTemplates) {
+    await supabase.from('whatsapp_templates').upsert(
+      {
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        header_text: t.headerText,
+        header_example: t.headerExample,
+        body_text: t.bodyText,
+        variable_examples: t.variableExamples,
+        footer_text: t.footerText,
+        meta_template_id: t.metaTemplateId,
+        status: t.status.toLowerCase(),
+        rejected_reason: t.rejectedReason,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'name' }
+    );
+  }
+
+  return metaTemplates.length;
+}
+
+templatesRouter.post('/sync', async (_req, res) => {
+  try {
+    const count = await syncTemplatesFromMeta();
+    res.json({ ok: true, count });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'failed to sync templates from Meta' });
+  }
+});
 
 templatesRouter.get('/', async (_req, res) => {
   const { data, error } = await supabase.from('whatsapp_templates').select('*').order('created_at', { ascending: false });
