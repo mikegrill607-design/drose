@@ -55,6 +55,16 @@ export async function ensureChatMediaBucket(): Promise<void> {
   }
 }
 
+// Route handlers build storage paths as `${prefix}/${Date.now()}-${originalname}`
+// straight from the uploaded file's client-supplied name -- strip anything
+// that isn't a safe filename character so a crafted name (e.g. containing
+// "../" or a null byte) can't land outside the intended folder or collide
+// with an unrelated object in the bucket.
+export function sanitizeFilename(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? name;
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
+}
+
 export async function uploadChatMedia(
   path: string,
   buffer: Buffer,

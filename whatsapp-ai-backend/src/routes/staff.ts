@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase';
 import { sendWhatsAppMessage, sendWhatsAppImage } from '../lib/whatsapp';
-import { uploadChatMedia } from '../lib/chatMedia';
+import { uploadChatMedia, sanitizeFilename } from '../lib/chatMedia';
 import { generateAiReply } from '../lib/ai';
 import { detectLanguage } from '../lib/language';
 import { expensiveLimiter } from '../lib/rateLimiters';
@@ -120,7 +120,7 @@ staffRouter.post('/send-image', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const path = `${conversationId}/${Date.now()}-${req.file.originalname}`;
+    const path = `${conversationId}/${Date.now()}-${sanitizeFilename(req.file.originalname)}`;
     const publicUrl = await uploadChatMedia(path, req.file.buffer, req.file.mimetype);
 
     const sentId = await sendWhatsAppImage(conversation.customer_phone, publicUrl, caption || undefined);

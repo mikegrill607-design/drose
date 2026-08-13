@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase';
-import { uploadChatMedia } from '../lib/chatMedia';
+import { uploadChatMedia, sanitizeFilename } from '../lib/chatMedia';
 
 export const sizeChartRouter = Router();
 
@@ -39,7 +39,7 @@ sizeChartRouter.post('/upload', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const path = `size-chart/${product_topic}/${Date.now()}-${req.file.originalname}`;
+    const path = `size-chart/${sanitizeFilename(product_topic)}/${Date.now()}-${sanitizeFilename(req.file.originalname)}`;
     const imageUrl = await uploadChatMedia(path, req.file.buffer, req.file.mimetype);
 
     const { data, error } = await supabase

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase';
-import { uploadChatMedia } from '../lib/chatMedia';
+import { uploadChatMedia, sanitizeFilename } from '../lib/chatMedia';
 
 export const paymentMethodsRouter = Router();
 
@@ -34,7 +34,7 @@ paymentMethodsRouter.post('/upload', upload.single('file'), async (req, res) => 
   }
 
   try {
-    const path = `payment-methods/${Date.now()}-${req.file.originalname}`;
+    const path = `payment-methods/${Date.now()}-${sanitizeFilename(req.file.originalname)}`;
     const imageUrl = await uploadChatMedia(path, req.file.buffer, req.file.mimetype);
 
     const { data, error } = await supabase

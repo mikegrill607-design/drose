@@ -46,6 +46,23 @@ create table staff (
   auth_user_id uuid references auth.users(id)
 );
 
+-- Used by every "staff read X" RLS policy below. SECURITY DEFINER so
+-- checking "is this session a staff member" doesn't recurse into staff's own
+-- RLS policy -- the standard Supabase pattern for role-membership checks.
+-- Defined here (right after `staff` exists) since it must exist before any
+-- policy that references it further down this file.
+create or replace function is_staff()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (select 1 from staff where auth_user_id = auth.uid());
+$$;
+
+grant execute on function is_staff() to authenticated;
+
 -- WhatsApp Business + integration settings (managed from dashboard Settings page, not hardcoded env vars)
 create table app_settings (
   id uuid primary key default gen_random_uuid(),
@@ -135,7 +152,7 @@ create table staff_alert_log (
 );
 create index staff_alert_log_wa_message_id_idx on staff_alert_log (wa_message_id);
 alter table staff_alert_log enable row level security;
-create policy "authenticated read staff_alert_log" on staff_alert_log for select to authenticated using (true);
+create policy "staff read staff_alert_log" on staff_alert_log for select to authenticated using (is_staff());
 
 -- Design-code image catalog -- lets the AI itself send kain-pasang-style
 -- product photos so the customer can pick a design code, instead of
@@ -156,7 +173,7 @@ create table design_catalog (
 );
 create index design_catalog_topic_code_idx on design_catalog (product_topic, design_code);
 alter table design_catalog enable row level security;
-create policy "authenticated read design_catalog" on design_catalog for select to authenticated using (true);
+create policy "staff read design_catalog" on design_catalog for select to authenticated using (is_staff());
 
 -- Size chart reference images -- simpler than design_catalog: no "pick a
 -- code" step, just a fixed set of images (e.g. short/long sleeve
@@ -172,7 +189,7 @@ create table size_chart_images (
 );
 create index size_chart_images_topic_idx on size_chart_images (product_topic);
 alter table size_chart_images enable row level security;
-create policy "authenticated read size_chart_images" on size_chart_images for select to authenticated using (true);
+create policy "staff read size_chart_images" on size_chart_images for select to authenticated using (is_staff());
 
 -- Payment method QR codes -- the AI sends the matching one automatically
 -- once a customer has chosen a design and named a preferred payment
@@ -187,7 +204,7 @@ create table payment_methods (
   created_at timestamptz not null default now()
 );
 alter table payment_methods enable row level security;
-create policy "authenticated read payment_methods" on payment_methods for select to authenticated using (true);
+create policy "staff read payment_methods" on payment_methods for select to authenticated using (is_staff());
 
 -- Token usage log (for cost monitoring)
 create table token_usage (
@@ -202,8 +219,11 @@ create table token_usage (
 
 -- Dashboard staff read conversations/messages/KB/prompt/usage directly via
 -- Supabase (anon key + Supabase Auth), but never write except through the
--- Railway backend. Enable RLS + policies once staff auth roles are finalized;
--- until then these tables are readable to any authenticated dashboard user.
+-- Railway backend. Scoped to actual `staff` rows via is_staff() -- plain
+-- `to authenticated` would mean "any signed-in Supabase user", not "an
+-- actual staff member" (Supabase Auth allows email signup independently of
+-- this app's own login-only UI, since the anon key is necessarily public in
+-- the frontend bundle).
 alter table conversations enable row level security;
 alter table messages enable row level security;
 alter table knowledge_base enable row level security;
@@ -213,11 +233,11 @@ alter table follow_up_log enable row level security;
 alter table staff enable row level security;
 alter table whatsapp_templates enable row level security;
 
-create policy "authenticated read conversations" on conversations for select to authenticated using (true);
-create policy "authenticated read messages" on messages for select to authenticated using (true);
-create policy "authenticated read knowledge_base" on knowledge_base for select to authenticated using (true);
-create policy "authenticated read system_prompt" on system_prompt for select to authenticated using (true);
-create policy "authenticated read token_usage" on token_usage for select to authenticated using (true);
-create policy "authenticated read follow_up_log" on follow_up_log for select to authenticated using (true);
-create policy "authenticated read staff" on staff for select to authenticated using (true);
-create policy "authenticated read whatsapp_templates" on whatsapp_templates for select to authenticated using (true);
+create policy "staff read conversations" on conversations for select to authenticated using (is_staff());
+create policy "staff read messages" on messages for select to authenticated using (is_staff());
+create policy "staff read knowledge_base" on knowledge_base for select to authenticated using (is_staff());
+create policy "staff read system_prompt" on system_prompt for select to authenticated using (is_staff());
+create policy "staff read token_usage" on token_usage for select to authenticated using (is_staff());
+create policy "staff read follow_up_log" on follow_up_log for select to authenticated using (is_staff());
+create policy "staff read staff" on staff for select to authenticated using (is_staff());
+create policy "staff read whatsapp_templates" on whatsapp_templates for select to authenticated using (is_staff());

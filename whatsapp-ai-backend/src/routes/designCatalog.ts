@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase';
-import { uploadChatMedia } from '../lib/chatMedia';
+import { uploadChatMedia, sanitizeFilename } from '../lib/chatMedia';
 
 export const designCatalogRouter = Router();
 
@@ -42,7 +42,7 @@ designCatalogRouter.post('/upload', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const path = `design-catalog/${product_topic}/${design_code}-${Date.now()}-${req.file.originalname}`;
+    const path = `design-catalog/${sanitizeFilename(product_topic)}/${sanitizeFilename(design_code)}-${Date.now()}-${sanitizeFilename(req.file.originalname)}`;
     const imageUrl = await uploadChatMedia(path, req.file.buffer, req.file.mimetype);
 
     const { data, error } = await supabase
