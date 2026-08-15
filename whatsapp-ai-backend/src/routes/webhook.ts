@@ -19,7 +19,7 @@ import { getActivePaymentMethods, findPaymentMethod } from '../lib/paymentMethod
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
 import { notifyStaff, notifyStaffFreeText } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
-import { Conversation, KnowledgeBaseEntry, Message } from '../types';
+import { AdReferral, Conversation, KnowledgeBaseEntry, Message } from '../types';
 
 export const webhookRouter = Router();
 
@@ -163,7 +163,20 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       text = waMessage.text?.body ?? '';
     }
 
+    // Meta attaches this to whichever message resulted from a customer
+    // clicking a Click-to-WhatsApp ad -- which ad, its headline/body text.
+    // Stored on the conversation and handed to the AI below so the very
+    // first reply can pick up where the ad left off instead of a generic
+    // greeting (see formatAdReferral in lib/ai.ts). Present on any message
+    // that originated from an ad click, not only ever the very first one.
+    const adReferral: AdReferral | null = waMessage.referral ?? null;
+
     const conversation = await upsertConversation(customerPhone, customerName, text);
+
+    if (adReferral) {
+      await supabase.from('conversations').update({ ad_referral: adReferral }).eq('id', conversation.id);
+      conversation.ad_referral = adReferral;
+    }
 
     await supabase.from('messages').insert({
       conversation_id: conversation.id,
@@ -190,10 +203,16 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       return;
     }
 
+    const { data: history } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: true });
+
     // Kain Pasang: QR was already sent and we're specifically waiting on the
-    // customer's payment receipt, not a normal reply -- skip the LLM call
-    // entirely and just watch for it here, before any of the usual
-    // reply/handoff logic below runs.
+    // customer's payment receipt -- watched for here, before any of the
+    // usual reply/handoff logic below runs, so a real receipt photo is
+    // never mistaken for a fresh design/payment pick.
     if (conversation.awaiting_payment_receipt) {
       const receiptLanguage = conversation.detected_language ?? detectLanguage(text);
 
@@ -230,27 +249,28 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         return;
       }
 
-      // Not a photo -- gently remind them instead of pinging staff on a
-      // guess. Cheap fixed reply, no LLM call needed for this.
-      const reminderMessage =
+      // Not a photo -- let the AI actually answer whatever they said (they
+      // might have a real question, not just silence) instead of repeating
+      // a fixed reminder no matter what -- but explicitly told not to
+      // reopen design/material picking, since that's already decided.
+      const receiptNote =
         receiptLanguage === 'ms'
-          ? 'Sila hantar resit/bukti pembayaran anda supaya staff kami boleh sahkan tempahan design ni ya 😊'
-          : 'Please send your payment receipt so our team can confirm this design booking 😊';
-      const reminderSentId = await sendWhatsAppMessage(customerPhone, reminderMessage);
-      await supabase.from('messages').insert({
-        conversation_id: conversation.id,
-        sender: 'ai',
-        content: reminderMessage,
-        wa_message_id: reminderSentId,
-      });
+          ? `Pelanggan ini sudah pilih design ${conversation.chosen_design_code} dan kaedah pembayaran ${conversation.payment_method_chosen}, dan sedang menunggu untuk hantar resit pembayaran. Mesej terbaru mereka BUKAN gambar resit. Jika ia soalan sebenar, jawab dengan ringkas menggunakan knowledge base. Kemudian (atau jika bukan soalan) ingatkan mereka untuk hantar gambar resit supaya staff boleh sahkan tempahan. JANGAN mula semula proses pilih design/material -- itu sudah selesai.`
+          : `This customer already picked design ${conversation.chosen_design_code} and payment method ${conversation.payment_method_chosen}, and is currently expected to send a payment receipt photo. Their latest message is NOT a photo. If it's a genuine question, answer it briefly using the knowledge base. Then (or if it isn't a question) remind them to send the receipt photo so staff can confirm the booking. Do NOT restart the design/material picking flow -- that's already decided.`;
+      const receiptAi = await generateAiReply(conversation.id, history ?? [], null, receiptNote);
+
+      if (receiptAi.reply) {
+        const reminderSentId = await sendWhatsAppMessage(customerPhone, receiptAi.reply);
+        await supabase.from('messages').insert({
+          conversation_id: conversation.id,
+          sender: 'ai',
+          content: receiptAi.reply,
+          wa_message_id: reminderSentId,
+          tokens_used: receiptAi.totalTokens,
+        });
+      }
       return;
     }
-
-    const { data: history } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversation.id)
-      .order('created_at', { ascending: true });
 
     const customerMessages = (history ?? []).filter((m: Message) => m.sender === 'customer');
 
@@ -267,7 +287,11 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     // out to qualify, this generated reply is discarded in favor of the
     // fixed handoff message below -- a small one-time cost per conversation
     // in exchange for not silently dropping real qualifying messages.
-    const ai = await generateAiReply(conversation.id, history ?? []);
+    // Only passed when THIS message carries fresh referral data -- not
+    // re-injected on every later turn, since the AI's first ad-aware reply
+    // already carries that context forward naturally in the conversation
+    // history from here on.
+    const ai = await generateAiReply(conversation.id, history ?? [], adReferral);
     const intent = resolveQualifyingCombo(customerMessages, ai.extractedAttributes);
 
     // intent.ts is generic across every product (not hardcoded per name), so
@@ -401,7 +425,11 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         // that before resolving this message as a fresh pick. Plain keyword
         // check is enough for a yes/no gate, no need to call the LLM for it.
         if (conversation.pending_design_code) {
-          const isAffirmative = /^(ye+s?|ya|yep|yup|ok(ay|lah)?|betul|yela)\b/i.test(text.trim().toLowerCase());
+          // Words or a plain thumbs-up/checkmark/OK-hand emoji -- customers
+          // very often confirm with just an emoji on WhatsApp, no text at all.
+          const isAffirmative =
+            /^(ye+s?|ya|yep|yup|ok(ay|lah)?|betul|yela)\b/i.test(text.trim().toLowerCase()) ||
+            /[\u{1F44D}\u{2705}\u{1F44C}]/u.test(text);
           if (isAffirmative) {
             const confirmedCode = conversation.pending_design_code;
             await proceedWithChosenDesign(conversation, customerPhone, confirmedCode, productGuess, text, language);

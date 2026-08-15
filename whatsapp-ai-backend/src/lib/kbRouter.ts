@@ -15,22 +15,7 @@ function tokensFor(entry: Pick<KnowledgeBaseEntry, 'topic' | 'keywords'>): strin
   return [...fromTopic, ...fromKeywords].map((t) => t.toLowerCase()).filter((t) => t.length > 1);
 }
 
-export function selectRelevantKb(
-  entries: KnowledgeBaseEntry[],
-  recentMessages: { sender: string; content: string }[],
-  // AI replies only need recent context (keeps token cost down), but
-  // webhook.ts's product-guessing for handoffs/lead capture wants the whole
-  // conversation -- an early "kemeja lelaki ada?" shouldn't be forgotten just
-  // because the qualifying size/color details came several messages later.
-  messageWindow: number = RECENT_MESSAGES_FOR_MATCHING
-): KnowledgeBaseEntry[] {
-  const searchText = recentMessages
-    .filter((m) => m.sender === 'customer')
-    .slice(-messageWindow)
-    .map((m) => m.content)
-    .join(' \n ')
-    .toLowerCase();
-
+function scoreEntries(entries: KnowledgeBaseEntry[], searchText: string): KnowledgeBaseEntry[] {
   if (!searchText.trim()) return [];
 
   const scored = entries
@@ -42,4 +27,39 @@ export function selectRelevantKb(
     .sort((a, b) => b.matchCount - a.matchCount);
 
   return scored.slice(0, MAX_CATEGORIES_INCLUDED).map((s) => s.entry);
+}
+
+export function selectRelevantKb(
+  entries: KnowledgeBaseEntry[],
+  recentMessages: { sender: string; content: string }[],
+  // AI replies only need recent context (keeps token cost down), but
+  // webhook.ts's product-guessing for handoffs/lead capture wants the whole
+  // conversation -- an early "kemeja lelaki ada?" shouldn't be forgotten just
+  // because the qualifying size/color details came several messages later.
+  messageWindow: number = RECENT_MESSAGES_FOR_MATCHING
+): KnowledgeBaseEntry[] {
+  const customerMessages = recentMessages.filter((m) => m.sender === 'customer');
+
+  // Score the LAST customer message alone first -- a clear topic switch
+  // ("kemeja ada?" ... several messages later ... "actually kain pasang
+  // pulak, warna apa ada?") should win immediately, not get outvoted by an
+  // earlier product that happened to be mentioned more times overall
+  // (previously scored by raw keyword count across the whole window, which
+  // let an early product dominate long after the customer had moved on).
+  // Only falls back to the full window when the latest message alone has
+  // no product signal at all (e.g. "saiz M, pendek" -- an attribute reply
+  // that doesn't name a product), so early context still isn't lost.
+  const lastMessage = customerMessages[customerMessages.length - 1];
+  if (lastMessage) {
+    const lastOnly = scoreEntries(entries, lastMessage.content.toLowerCase());
+    if (lastOnly.length > 0) return lastOnly;
+  }
+
+  const searchText = customerMessages
+    .slice(-messageWindow)
+    .map((m) => m.content)
+    .join(' \n ')
+    .toLowerCase();
+
+  return scoreEntries(entries, searchText);
 }

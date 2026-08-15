@@ -2,6 +2,22 @@ export type ConversationStatus = 'ai_active' | 'awaiting_staff' | 'staff_handlin
 export type MessageSender = 'customer' | 'ai' | 'staff';
 export type DetectedLanguage = 'ms' | 'en';
 
+// Meta's shape for the object attached to the first message of a
+// Click-to-WhatsApp ad click -- fields are optional because Meta doesn't
+// guarantee all of them are present (e.g. text-only ads have no media_url).
+export interface AdReferral {
+  source_type?: string;
+  source_id?: string;
+  source_url?: string;
+  headline?: string;
+  body?: string;
+  media_type?: string;
+  image_url?: string;
+  video_url?: string;
+  thumbnail_url?: string;
+  ctwa_clid?: string;
+}
+
 export interface Conversation {
   id: string;
   customer_phone: string;
@@ -22,6 +38,7 @@ export interface Conversation {
   payment_method_chosen: string | null;
   awaiting_payment_receipt: boolean;
   pending_design_code: string | null;
+  ad_referral: AdReferral | null;
   created_at: string;
 }
 

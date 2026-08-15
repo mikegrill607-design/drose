@@ -184,6 +184,10 @@ staffRouter.post('/handback', async (req, res) => {
   // would resume thinking a design/payment method was already chosen from
   // whatever happened before staff took over, even if that flow finished,
   // stalled, or the customer's now asking about something else entirely.
+  // Also clears awaiting_payment_receipt and pending_design_code -- without
+  // these, a customer handed back mid-payment-flow would have every future
+  // message treated as "still waiting for that same receipt/confirmation",
+  // regardless of what staff and the customer actually discussed.
   const { error } = await supabase
     .from('conversations')
     .update({
@@ -192,6 +196,8 @@ staffRouter.post('/handback', async (req, res) => {
       sent_design_codes: [],
       chosen_design_code: null,
       payment_method_chosen: null,
+      awaiting_payment_receipt: false,
+      pending_design_code: null,
     })
     .eq('id', conversationId);
 

@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { supabase } from './supabase';
 import { getAppSettings } from './appSettings';
 import { selectRelevantKb } from './kbRouter';
-import { KnowledgeBaseEntry, Message } from '../types';
+import { AdReferral, KnowledgeBaseEntry, Message } from '../types';
 
 const HISTORY_LIMIT = 15;
 
@@ -157,6 +157,16 @@ function parseCompletion(raw: string): { reply: string; extractedAttributes: Ext
   }
 }
 
+// Meta attaches this to the first message of a Click-to-WhatsApp ad click.
+// Without it, a customer who clicked a specific product ad still gets the
+// AI's default generic greeting, which throws away exactly the intent the
+// ad already told us -- injected as extra system context only when present,
+// so organic (non-ad) conversations are completely unaffected.
+function formatAdReferral(referral: AdReferral | null | undefined): string {
+  if (!referral || (!referral.headline && !referral.body)) return '';
+  return `\n\n---\nAD CONTEXT: this customer just clicked a WhatsApp ad to start this conversation. Do NOT greet them generically ("Hi, welcome to Drose Batik, how can I help?") -- acknowledge what they were specifically interested in from the ad in your very first reply instead, then continue naturally from there.\nAd headline: ${referral.headline ?? '(none)'}\nAd description: ${referral.body ?? '(none)'}`;
+}
+
 export interface AiReplyResult {
   reply: string;
   // null if the model's output didn't include a parseable attributes line
@@ -172,7 +182,14 @@ export interface AiReplyResult {
 // conversation (and never sent over WhatsApp; see routes/staff.ts test-ai).
 export async function generateAiReply(
   conversationId: string | null,
-  recentMessages: HistoryMessage[]
+  recentMessages: HistoryMessage[],
+  adReferral?: AdReferral | null,
+  // Free-form situational note appended after everything else -- e.g.
+  // "customer already picked a design/payment method, just needs to send
+  // the receipt; answer any real question first, then remind them" (see
+  // webhook.ts's awaiting_payment_receipt handling). Kept generic rather
+  // than adding another named parameter per situation.
+  extraInstruction?: string
 ): Promise<AiReplyResult> {
   const [{ client, model }, systemPrompt, kbContext] = await Promise.all([
     getLlmClient(),
@@ -181,11 +198,15 @@ export async function generateAiReply(
   ]);
 
   const history = formatHistory(recentMessages.slice(-HISTORY_LIMIT));
+  const extraNote = extraInstruction ? `\n\n---\n${extraInstruction}` : '';
 
   const completion = await client.chat.completions.create({
     model,
     messages: [
-      { role: 'system', content: `${systemPrompt}\n\n${kbContext}${ATTRIBUTE_EXTRACTION_INSTRUCTION}` },
+      {
+        role: 'system',
+        content: `${systemPrompt}\n\n${kbContext}${ATTRIBUTE_EXTRACTION_INSTRUCTION}${formatAdReferral(adReferral)}${extraNote}`,
+      },
       { role: 'user', content: history },
     ],
   });
