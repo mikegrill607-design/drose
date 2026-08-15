@@ -99,6 +99,14 @@ export interface ExtractedAttributes {
   // "which payment method" question. Only meaningful once a design code has
   // already been chosen.
   paymentMethod: string | null;
+  // Which exact design code (from the ones already shown, e.g. "MRS A1")
+  // the customer's latest reply picks -- including vague references like
+  // "yg ini"/"this one"/"yang tengah" that a plain substring match on the
+  // raw code text can't resolve, since the model has the actual shown
+  // codes in context. Null if they haven't picked one yet. webhook.ts
+  // still validates this against the codes actually shown before trusting
+  // it -- never assumed correct just because the model said so.
+  chosenDesignCode: string | null;
 }
 
 const ATTRIBUTES_DELIMITER = '###ATTRIBUTES###';
@@ -112,10 +120,12 @@ const ATTRIBUTES_DELIMITER = '###ATTRIBUTES###';
 // system trying to re-derive it from raw text with regex.
 const ATTRIBUTE_EXTRACTION_INSTRUCTION = `
 ---
-After writing your reply above, on a new line output exactly "${ATTRIBUTES_DELIMITER}" followed by a single-line JSON object capturing what the CUSTOMER has stated so far in this whole conversation (not just their latest message) for these fields: size, sleeve (short/long), color, material, wantsMoreDesigns, paymentMethod. Use a short value in the customer's own words for each one they've given, or null if not given yet. Interpret typos and casual phrasing normally (e.g. "pemdek" means "pendek"). Only fill a field once they've clearly specified it -- never guess or default one.
+After writing your reply above, on a new line output exactly "${ATTRIBUTES_DELIMITER}" followed by a single-line JSON object capturing what the CUSTOMER has stated so far in this whole conversation (not just their latest message) for these fields: size, sleeve (short/long), color, material, wantsMoreDesigns, paymentMethod, chosenDesignCode. Use a short value in the customer's own words for each one they've given, or null if not given yet. Interpret typos and casual phrasing normally (e.g. "pemdek" means "pendek"). Only fill a field once they've clearly specified it -- never guess or default one.
+material: if you just presented a numbered price list and the customer replies with just a number/position (e.g. "7", "no 3", "yang ke-2") instead of the name, resolve it to the actual material name at that position (e.g. "7" -> "Satin Majestic D'ROSE") -- a bare number still counts as clearly specifying it, don't leave this null just because they didn't type the name out.
 wantsMoreDesigns: true only if the customer was just shown some design photos and their latest reply says they don't like these / want to see other options (e.g. "takde lain ke", "show me more", "tak berkenan") -- otherwise false.
-paymentMethod: only fill this in if you had just asked the customer which payment method they prefer and their latest reply names one (e.g. "maybank", "bank islam") -- otherwise null.
-Example: ${ATTRIBUTES_DELIMITER}\n{"size":"M","sleeve":"short","color":null,"material":null,"wantsMoreDesigns":false,"paymentMethod":null}
+paymentMethod: only fill this in if you had just asked the customer which payment method they prefer and their latest reply names one of the ones actually offered (e.g. "maybank", "bank islam") -- if they say something that isn't one of the actual options (like just "QR"), leave this null so they get asked to clarify, don't guess which bank they mean.
+chosenDesignCode: if you've just shown the customer design codes and their latest reply picks one -- whether they type the exact code, a messy version of it, a vague reference like "yg ini"/"this one"/"yang tengah"/"the first one", or just a bare number/position ("1", "2", "no 3") meaning the 1st/2nd/3rd design photo you just sent, in the order you sent them -- resolve it to the EXACT code string as it was shown to them (e.g. "MRS A1"), using the design codes visible earlier in this conversation. If it's ambiguous which one they mean (e.g. several were shown and their reply doesn't clearly point to one), leave this null instead of guessing.
+Example: ${ATTRIBUTES_DELIMITER}\n{"size":"M","sleeve":"short","color":null,"material":null,"wantsMoreDesigns":false,"paymentMethod":null,"chosenDesignCode":null}
 This JSON line is read by code and never shown to the customer.`;
 
 function parseCompletion(raw: string): { reply: string; extractedAttributes: ExtractedAttributes | null } {
@@ -137,6 +147,7 @@ function parseCompletion(raw: string): { reply: string; extractedAttributes: Ext
         material: parsed.material ?? null,
         wantsMoreDesigns: parsed.wantsMoreDesigns === true,
         paymentMethod: parsed.paymentMethod ?? null,
+        chosenDesignCode: parsed.chosenDesignCode ?? null,
       },
     };
   } catch {

@@ -8,11 +8,16 @@ import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
 import { selectRelevantKb } from '../lib/kbRouter';
-import { designCatalogHasEntriesForTopic, getNextDesignBatch, DesignGroup } from '../lib/designCatalog';
+import {
+  designCatalogHasEntriesForTopic,
+  getNextDesignBatch,
+  resolveQuotedDesignCode,
+  DesignGroup,
+} from '../lib/designCatalog';
 import { getSizeChartImages } from '../lib/sizeChart';
 import { getActivePaymentMethods, findPaymentMethod } from '../lib/paymentMethods';
 import { sendLeadToGoogleSheets } from '../lib/googleSheets';
-import { notifyStaff } from '../lib/staffNotify';
+import { notifyStaff, notifyStaffFreeText } from '../lib/staffNotify';
 import { generateAiReply } from '../lib/ai';
 import { Conversation, KnowledgeBaseEntry, Message } from '../types';
 
@@ -185,6 +190,62 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       return;
     }
 
+    // Kain Pasang: QR was already sent and we're specifically waiting on the
+    // customer's payment receipt, not a normal reply -- skip the LLM call
+    // entirely and just watch for it here, before any of the usual
+    // reply/handoff logic below runs.
+    if (conversation.awaiting_payment_receipt) {
+      const receiptLanguage = conversation.detected_language ?? detectLanguage(text);
+
+      if (mediaUrl) {
+        // Receipt's in -- this is the actual "customer paid" signal, so
+        // staff only get pinged now, not back when the QR was sent.
+        await supabase
+          .from('conversations')
+          .update({ awaiting_payment_receipt: false })
+          .eq('id', conversation.id);
+
+        const details = [
+          `kod design: ${conversation.chosen_design_code}`,
+          `payment: ${conversation.payment_method_chosen}`,
+          'resit: dihantar',
+        ];
+        await handoffToStaff(
+          conversation,
+          'Kain Pasang',
+          details,
+          text || (receiptLanguage === 'ms' ? '[resit pembayaran]' : '[payment receipt]')
+        );
+        await sendLeadToGoogleSheets({
+          customerName: conversation.customer_name,
+          customerPhone: conversation.customer_phone,
+          product: 'Kain Pasang',
+          details: details.join(', '),
+          lastMessage: text,
+          status: 'Qualified — receipt received, awaiting confirmation',
+        });
+        if (!conversation.lead_logged_to_sheets) {
+          await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
+        }
+        return;
+      }
+
+      // Not a photo -- gently remind them instead of pinging staff on a
+      // guess. Cheap fixed reply, no LLM call needed for this.
+      const reminderMessage =
+        receiptLanguage === 'ms'
+          ? 'Sila hantar resit/bukti pembayaran anda supaya staff kami boleh sahkan tempahan design ni ya 😊'
+          : 'Please send your payment receipt so our team can confirm this design booking 😊';
+      const reminderSentId = await sendWhatsAppMessage(customerPhone, reminderMessage);
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        sender: 'ai',
+        content: reminderMessage,
+        wa_message_id: reminderSentId,
+      });
+      return;
+    }
+
     const { data: history } = await supabase
       .from('messages')
       .select('*')
@@ -285,10 +346,14 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
             wa_message_id: qrSentId,
           });
 
+          // Handoff is deferred to when the receipt photo actually arrives
+          // (see the awaiting_payment_receipt check near the top of this
+          // function) -- staff shouldn't get pinged before the customer has
+          // actually paid anything, just because they picked a bank.
           const confirmMessage =
             language === 'ms'
-              ? `Terima kasih! Sila buat pembayaran menggunakan QR code di atas, dan hantar resit selepas bayar ya. Staff kami akan sahkan design ${conversation.chosen_design_code} sekejap lagi 😊`
-              : `Thank you! Please pay using the QR code above and send the receipt once done. Our team will confirm design ${conversation.chosen_design_code} shortly 😊`;
+              ? `Terima kasih! Sila buat pembayaran menggunakan QR code di atas, dan hantar resit selepas bayar ya -- saya akan maklumkan staff sebaik sahaja resit diterima 😊`
+              : `Thank you! Please pay using the QR code above and send the receipt once done -- I'll let our team know the moment the receipt comes in 😊`;
           const confirmSentId = await sendWhatsAppMessage(customerPhone, confirmMessage);
           await supabase.from('messages').insert({
             conversation_id: conversation.id,
@@ -299,18 +364,21 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
 
           await supabase
             .from('conversations')
-            .update({ payment_method_chosen: method.method_name })
+            .update({
+              payment_method_chosen: method.method_name,
+              awaiting_payment_receipt: true,
+              last_ai_or_staff_message_at: new Date().toISOString(),
+            })
             .eq('id', conversation.id);
 
           const details = [`kod design: ${conversation.chosen_design_code}`, `payment: ${method.method_name}`];
-          await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
           await sendLeadToGoogleSheets({
             customerName: conversation.customer_name,
             customerPhone: conversation.customer_phone,
             product: productGuess ?? 'Kain Pasang',
             details: details.join(', '),
             lastMessage: text,
-            status: 'Qualified — payment sent, awaiting confirmation',
+            status: 'Qualified — payment link sent, awaiting receipt',
           });
           if (!conversation.lead_logged_to_sheets) {
             await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
@@ -321,61 +389,70 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         // normal reply so the AI can re-ask, per the system prompt.
       } else if (conversation.sent_design_codes.length > 0) {
         // Stage 2: at least one batch already shown -- did they pick one, or ask for more?
-        const chosenCode = conversation.sent_design_codes.find((code) =>
-          text.toLowerCase().includes(code.toLowerCase())
-        );
+        const normalizeCode = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+        const normalizedText = normalizeCode(text);
 
-        if (chosenCode) {
-          const methods = await getActivePaymentMethods();
-
-          if (methods.length === 0) {
-            // No payment methods configured yet -- fall back to the old
-            // staff-sends-payment-manually flow rather than asking a
-            // question with nothing to answer it.
-            const handoffMessage =
-              language === 'ms'
-                ? `Terima kasih! Staff kami akan sahkan design ${chosenCode} dan hantar butiran pembayaran sekejap lagi ya 😊`
-                : `Thank you! Our team will confirm design ${chosenCode} and send payment details shortly 😊`;
-            const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
-            await supabase.from('messages').insert({
-              conversation_id: conversation.id,
-              sender: 'ai',
-              content: handoffMessage,
-              wa_message_id: sentId,
-            });
-
-            const details = [`kod design: ${chosenCode}`];
-            await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
-            await sendLeadToGoogleSheets({
-              customerName: conversation.customer_name,
-              customerPhone: conversation.customer_phone,
-              product: productGuess ?? 'Kain Pasang',
-              details: details.join(', '),
-              lastMessage: text,
-              status: 'Qualified — handed to staff',
-            });
-            if (!conversation.lead_logged_to_sheets) {
-              await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
-            }
+        // A guess from last message is still waiting on a yes/no -- check
+        // that before resolving this message as a fresh pick. Plain keyword
+        // check is enough for a yes/no gate, no need to call the LLM for it.
+        if (conversation.pending_design_code) {
+          const isAffirmative = /^(ye+s?|ya|yep|yup|ok(ay|lah)?|betul|yela)\b/i.test(text.trim().toLowerCase());
+          if (isAffirmative) {
+            const confirmedCode = conversation.pending_design_code;
+            await proceedWithChosenDesign(conversation, customerPhone, confirmedCode, productGuess, text, language);
             return;
           }
+          // Not a clear yes -- drop the guess and resolve this message
+          // fresh below (they may have named a different code, or
+          // swipe-replied to a different photo instead of answering).
+          await supabase.from('conversations').update({ pending_design_code: null }).eq('id', conversation.id);
+        }
 
-          const methodNames = methods.map((m) => m.method_name).join(' / ');
-          const askPaymentMessage =
+        // Two tiers, split by how much they can be trusted:
+        // - safeCode: swipe/quote-reply on a specific photo (a hard signal
+        //   from Meta, context.id, not a guess) or exact/messy code typing
+        //   (unambiguous once whitespace-normalized) -- trusted immediately.
+        // - riskyCode: the model's own resolution of a vague reference
+        //   ("yg ini", a bare number) using the codes shown earlier in the
+        //   conversation -- a genuine guess, so it's confirmed with the
+        //   customer before being acted on, not trusted immediately.
+        const repliedToWaMessageId: string | null = waMessage.context?.id ?? null;
+        const quotedCode = await resolveQuotedDesignCode(repliedToWaMessageId);
+        const extractedCode = ai.extractedAttributes?.chosenDesignCode ?? null;
+
+        const safeCode =
+          (quotedCode &&
+            conversation.sent_design_codes.find((code) => normalizeCode(code) === normalizeCode(quotedCode))) ||
+          conversation.sent_design_codes.find((code) => normalizedText.includes(normalizeCode(code)));
+
+        const riskyCode = !safeCode && extractedCode
+          ? conversation.sent_design_codes.find((code) => normalizeCode(code) === normalizeCode(extractedCode))
+          : undefined;
+
+        if (safeCode) {
+          await proceedWithChosenDesign(conversation, customerPhone, safeCode, productGuess, text, language);
+          return;
+        }
+
+        if (riskyCode) {
+          // Only the model's own inference from vague text lands here
+          // (quote-reply and exact typing are resolved as safeCode above,
+          // trusted immediately) -- confirm before committing, since acting
+          // on a wrong guess here means reserving the wrong design.
+          const confirmMessage =
             language === 'ms'
-              ? `Bagus, pilihan yang cantik! Untuk design ${chosenCode}, anda nak bayar guna payment method yang mana -- ${methodNames}?`
-              : `Great choice! For design ${chosenCode}, which payment method would you like to use -- ${methodNames}?`;
-          const askSentId = await sendWhatsAppMessage(customerPhone, askPaymentMessage);
+              ? `Maksud awak kod ${riskyCode} ya? Sila sahkan 😊`
+              : `Just to confirm, you mean design ${riskyCode}? 😊`;
+          const confirmSentId = await sendWhatsAppMessage(customerPhone, confirmMessage);
           await supabase.from('messages').insert({
             conversation_id: conversation.id,
             sender: 'ai',
-            content: askPaymentMessage,
-            wa_message_id: askSentId,
+            content: confirmMessage,
+            wa_message_id: confirmSentId,
           });
-
           await supabase
             .from('conversations')
-            .update({ chosen_design_code: chosenCode, last_ai_or_staff_message_at: new Date().toISOString() })
+            .update({ pending_design_code: riskyCode, last_ai_or_staff_message_at: new Date().toISOString() })
             .eq('id', conversation.id);
           return;
         }
@@ -434,6 +511,37 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
 
         if (material || color) {
           const batch = await getNextDesignBatch(topMatch.topic, material, color, []);
+
+          if (batch.specificRequestMatchedNothing) {
+            // Customer named a real material/color but nothing in the
+            // catalog matches it -- showing unrelated designs instead would
+            // be misleading (each material is its own price tier), so
+            // apologize and flag the gap to staff instead of substituting.
+            const gapMessage =
+              language === 'ms'
+                ? `Maaf, design untuk "${material ?? color}" belum tersedia buat masa ini. Staff kami akan kemaskini tak lama lagi -- nak saya tunjukkan pilihan material lain yang ada sekarang? 😊`
+                : `Sorry, designs for "${material ?? color}" aren't available yet. Our team will update the catalog soon -- want me to show you what's currently available instead? 😊`;
+            const gapSentId = await sendWhatsAppMessage(customerPhone, gapMessage);
+            await supabase.from('messages').insert({
+              conversation_id: conversation.id,
+              sender: 'ai',
+              content: gapMessage,
+              wa_message_id: gapSentId,
+            });
+
+            const { data: gapStaff } = await supabase.from('staff').select('whatsapp_number');
+            const gapNotice =
+              `Catalog gap: ${conversation.customer_name ?? conversation.customer_phone} ` +
+              `(${conversation.customer_phone}) wants "${material ?? color}" for ${productGuess ?? 'Kain Pasang'} -- ` +
+              `no active designs uploaded for this yet.`;
+            for (const s of gapStaff ?? []) {
+              if (s.whatsapp_number && !s.whatsapp_number.startsWith('TODO')) {
+                await notifyStaffFreeText(s.whatsapp_number, gapNotice, 'catalog_gap', conversation.id);
+              }
+            }
+            return;
+          }
+
           if (batch.groups.length > 0) {
             await sendDesignBatch(conversation.id, customerPhone, batch.groups);
 
@@ -592,6 +700,75 @@ async function upsertConversation(
     .single();
   if (error) throw error;
   return created as Conversation;
+}
+
+// Shared by both the "safe" pick (trusted immediately) and the "risky"
+// pick once the customer's confirmed it (see the pending_design_code
+// handling above) -- either way, this is the point a design is truly
+// locked in, so both paths converge here to ask the same payment question.
+async function proceedWithChosenDesign(
+  conversation: Conversation,
+  customerPhone: string,
+  chosenCode: string,
+  productGuess: string | null,
+  text: string,
+  language: string
+): Promise<void> {
+  const methods = await getActivePaymentMethods();
+
+  if (methods.length === 0) {
+    // No payment methods configured yet -- fall back to the old
+    // staff-sends-payment-manually flow rather than asking a question with
+    // nothing to answer it.
+    const handoffMessage =
+      language === 'ms'
+        ? `Terima kasih! Staff kami akan sahkan design ${chosenCode} dan hantar butiran pembayaran sekejap lagi ya 😊`
+        : `Thank you! Our team will confirm design ${chosenCode} and send payment details shortly 😊`;
+    const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
+    await supabase.from('messages').insert({
+      conversation_id: conversation.id,
+      sender: 'ai',
+      content: handoffMessage,
+      wa_message_id: sentId,
+    });
+
+    const details = [`kod design: ${chosenCode}`];
+    await handoffToStaff(conversation, productGuess ?? 'Kain Pasang', details, text);
+    await sendLeadToGoogleSheets({
+      customerName: conversation.customer_name,
+      customerPhone: conversation.customer_phone,
+      product: productGuess ?? 'Kain Pasang',
+      details: details.join(', '),
+      lastMessage: text,
+      status: 'Qualified — handed to staff',
+    });
+    if (!conversation.lead_logged_to_sheets) {
+      await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
+    }
+    return;
+  }
+
+  const methodNames = methods.map((m) => m.method_name).join(' / ');
+  const askPaymentMessage =
+    language === 'ms'
+      ? `Bagus, pilihan yang cantik! Untuk design ${chosenCode}, anda nak bayar guna payment method yang mana -- ${methodNames}?`
+      : `Great choice! For design ${chosenCode}, which payment method would you like to use -- ${methodNames}?`;
+  const askSentId = await sendWhatsAppMessage(customerPhone, askPaymentMessage);
+  await supabase.from('messages').insert({
+    conversation_id: conversation.id,
+    sender: 'ai',
+    content: askPaymentMessage,
+    wa_message_id: askSentId,
+  });
+
+  await supabase
+    .from('conversations')
+    .update({
+      chosen_design_code: chosenCode,
+      pending_design_code: null,
+      last_ai_or_staff_message_at: new Date().toISOString(),
+    })
+    .eq('id', conversation.id);
 }
 
 async function handoffToStaff(

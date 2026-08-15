@@ -38,18 +38,47 @@ async function logAlertAttempt(input: {
 
 // Meta's 24-hour session rule applies to staff numbers too, not just
 // customers -- a free-text alert only delivers if that staff member has
-// messaged the business number within the last 24 hours. Free text is tried
-// first since it works for the common case (an immediate handoff, staff
-// likely active recently) without requiring an approved template at all.
-// Falls back to an approved template only if that send fails -- which is
-// expected to happen far more often for the 2-day reminder, since by
-// definition 2 days of silence has usually also closed the staff session.
+// messaged the business number within the last 24 hours. Relying on that
+// meant staff (or the owner) had to remember to keep messaging the bot just
+// to keep alerts flowing, which defeats the point of an alert. So when an
+// approved template is configured, it's used FIRST -- template sends work
+// regardless of session state, guaranteeing delivery without that chore.
+// Free text is only a fallback now (used when no template is configured, or
+// if the template send itself fails), not the primary path.
 //
-// Every attempt (text and, if it happens, the template fallback) is logged
-// to staff_alert_log -- previously nothing was logged anywhere, so there was
-// no row for Meta's later delivery-status webhook event to update, making
-// "did this actually arrive" unanswerable after the fact.
+// Every attempt (template and, if it happens, the free-text fallback) is
+// logged to staff_alert_log -- previously nothing was logged anywhere, so
+// there was no row for Meta's later delivery-status webhook event to
+// update, making "did this actually arrive" unanswerable after the fact.
 export async function notifyStaff(to: string, input: StaffAlertInput): Promise<void> {
+  const settings = await getAppSettings();
+  const templateName = settings[input.templateSettingKey];
+
+  if (templateName) {
+    const { data: template } = await supabase
+      .from('whatsapp_templates')
+      .select('name, language, status')
+      .eq('name', templateName)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (template) {
+      const sentViaTemplate = await sendWhatsAppTemplate(to, template.name, template.language, input.templateParams);
+      await logAlertAttempt({
+        to,
+        conversationId: input.conversationId,
+        kind: input.kind,
+        sentVia: 'template',
+        waMessageId: sentViaTemplate,
+        deliveryError: sentViaTemplate ? null : 'template send failed -- see Railway logs for HTTP detail',
+      });
+      if (sentViaTemplate) return;
+      console.error(`Template staff alert to ${to} failed; falling back to free text`);
+    } else {
+      console.warn(`Configured template "${templateName}" not found or not approved; falling back to free text`);
+    }
+  }
+
   const textResult = await sendWhatsAppTextVerbose(to, input.freeText);
   await logAlertAttempt({
     to,
@@ -59,39 +88,29 @@ export async function notifyStaff(to: string, input: StaffAlertInput): Promise<v
     waMessageId: textResult.messageId,
     deliveryError: textResult.ok ? null : textResult.error ?? 'unknown error',
   });
-  if (textResult.ok) return;
-
-  const settings = await getAppSettings();
-  const templateName = settings[input.templateSettingKey];
-  if (!templateName) {
-    console.warn(
-      `Free-text staff alert to ${to} failed and no fallback template ("${input.templateSettingKey}") is configured in Settings`
-    );
-    return;
+  if (!textResult.ok) {
+    console.error(`Free-text staff alert to ${to} also failed -- no template configured or template send failed`);
   }
+}
 
-  const { data: template } = await supabase
-    .from('whatsapp_templates')
-    .select('name, language, status')
-    .eq('name', templateName)
-    .eq('status', 'approved')
-    .maybeSingle();
-
-  if (!template) {
-    console.warn(`Fallback template "${templateName}" not found or not approved; staff alert to ${to} not sent`);
-    return;
-  }
-
-  const sentViaTemplate = await sendWhatsAppTemplate(to, template.name, template.language, input.templateParams);
+// For low-stakes internal notices (e.g. "a customer wanted a material with
+// no designs uploaded") that don't have their own approved template and
+// don't need one -- best-effort free text only, unlike notifyStaff's
+// guaranteed template-first delivery for real handoffs. Still logged to
+// staff_alert_log for the same "did this arrive" visibility.
+export async function notifyStaffFreeText(
+  to: string,
+  freeText: string,
+  kind: string,
+  conversationId?: string | null
+): Promise<void> {
+  const textResult = await sendWhatsAppTextVerbose(to, freeText);
   await logAlertAttempt({
     to,
-    conversationId: input.conversationId,
-    kind: input.kind,
-    sentVia: 'template',
-    waMessageId: sentViaTemplate,
-    deliveryError: sentViaTemplate ? null : 'template send failed -- see Railway logs for HTTP detail',
+    conversationId,
+    kind,
+    sentVia: 'text',
+    waMessageId: textResult.messageId,
+    deliveryError: textResult.ok ? null : textResult.error ?? 'unknown error',
   });
-  if (!sentViaTemplate) {
-    console.error(`Fallback template send also failed for staff alert to ${to}`);
-  }
 }

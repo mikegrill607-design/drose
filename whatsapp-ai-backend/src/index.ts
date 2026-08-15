@@ -11,6 +11,7 @@ import { paymentMethodsRouter } from './routes/paymentMethods';
 import { systemPromptRouter } from './routes/systemPrompt';
 import { settingsRouter } from './routes/settings';
 import { templatesRouter } from './routes/templates';
+import { publicStatsRouter } from './routes/publicStats';
 import { startFollowUpCron } from './cron/followUp';
 import { startTemplateStatusCron } from './cron/templateStatus';
 import { startStaffReminderCron } from './cron/staffReminder';
@@ -56,6 +57,12 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Meta calls this directly (no browser, no session) -- must stay open.
 app.use('/webhook', webhookLimiter, webhookRouter);
+
+// Deliberately public, no auth -- backs a shareable stats link
+// (app/stats/page.tsx). Rate-limited like the rest of the API, but not
+// gated behind requireStaffAuth; only ever serves the one aggregate defined
+// in publicStats.ts, never conversation/customer detail.
+app.use('/public-stats', apiLimiter, publicStatsRouter);
 
 // Everything else is dashboard-only: require a valid Supabase staff session.
 app.use('/staff', apiLimiter, requireStaffAuth, staffRouter);

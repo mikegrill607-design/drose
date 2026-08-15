@@ -20,6 +20,8 @@ export interface Conversation {
   sent_size_chart: boolean;
   chosen_design_code: string | null;
   payment_method_chosen: string | null;
+  awaiting_payment_receipt: boolean;
+  pending_design_code: string | null;
   created_at: string;
 }
 
