@@ -32,9 +32,15 @@ export async function findPaymentMethod(customerAnswer: string): Promise<Payment
   const needle = normalize(customerAnswer);
   if (!needle) return null;
 
+  // needle containing the full name is always safe (e.g. "nak guna maybank
+  // ye" contains "maybank" whole). The other direction -- the stored name
+  // containing whatever the customer typed -- is only trusted once the
+  // customer's text is long enough to be unambiguous: a short fragment like
+  // "mb" is technically a substring of "cimb" too, which would silently
+  // match the wrong bank entirely for someone abbreviating "Maybank".
   const substringMatch = methods.find((m) => {
     const name = normalize(m.method_name);
-    return name.includes(needle) || needle.includes(name);
+    return needle.includes(name) || (needle.length >= 4 && name.includes(needle));
   });
   if (substringMatch) return substringMatch;
 

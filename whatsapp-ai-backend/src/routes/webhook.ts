@@ -330,8 +330,13 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     if (hasDesignCatalog && topMatch) {
       if (conversation.chosen_design_code) {
         // Stage 3: a design's already been picked -- this reply should be their payment method choice.
+        // Same lesson as design-code picking: don't rely on the model's own
+        // extraction alone (it can miss a plain one-word answer like
+        // "maybank" even though it names a real, offered option) -- also
+        // try matching the raw reply directly, which findPaymentMethod
+        // already handles tolerantly (typos, spacing, partial names).
         const paymentAnswer = ai.extractedAttributes?.paymentMethod ?? null;
-        const method = paymentAnswer ? await findPaymentMethod(paymentAnswer) : null;
+        const method = (paymentAnswer && (await findPaymentMethod(paymentAnswer))) || (await findPaymentMethod(text));
 
         if (method) {
           const qrCaption = [method.method_name, method.account_holder, method.account_number]
