@@ -9,6 +9,7 @@ export default function DesignCatalogPage() {
   const [entries, setEntries] = useState<DesignCatalogEntry[]>([]);
   const [topics, setTopics] = useState<KnowledgeBaseEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [productTopic, setProductTopic] = useState('');
   const [designCode, setDesignCode] = useState('');
@@ -20,13 +21,20 @@ export default function DesignCatalogPage() {
   const [searchCode, setSearchCode] = useState('');
 
   async function loadAll() {
-    const [catalog, kb] = await Promise.all([
-      backendApi.getDesignCatalog(),
-      getSupabaseClient().from('knowledge_base').select('*').order('topic'),
-    ]);
-    setEntries(catalog);
-    setTopics((kb.data as KnowledgeBaseEntry[]) ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [catalog, kb] = await Promise.all([
+        backendApi.getDesignCatalog(),
+        getSupabaseClient().from('knowledge_base').select('*').order('topic'),
+      ]);
+      setEntries(catalog);
+      setTopics((kb.data as KnowledgeBaseEntry[]) ?? []);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load design catalog');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -100,6 +108,27 @@ export default function DesignCatalogPage() {
     if (!needle) return groups;
     return groups.filter((g) => g.designCode.toLowerCase().includes(needle));
   }, [groups, searchCode]);
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load the design catalog: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadAll();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

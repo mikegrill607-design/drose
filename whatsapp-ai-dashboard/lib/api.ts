@@ -271,4 +271,12 @@ export const backendApi = {
   ) => backendFetch<PaymentMethod>(`/payment-methods/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
 
   deletePaymentMethod: (id: string) => backendFetch(`/payment-methods/${id}`, { method: 'DELETE' }),
+
+  // Unauthenticated on the backend (see src/routes/publicStats.ts) -- backs
+  // the public /stats page. authHeaders() still runs but sends nothing
+  // useful without a staff session, which is fine: the route doesn't check it.
+  getPublicAiPerformance: () =>
+    backendFetch<{ totalPurchased: number; purchasedByAiOnly: number; aiCloseRate: number | null }>(
+      '/public-stats/ai-performance'
+    ),
 };

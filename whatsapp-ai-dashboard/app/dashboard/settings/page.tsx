@@ -562,12 +562,12 @@ export default function SettingsPage() {
       </section>
 
       <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-800">Staff Alert Fallback Templates</h2>
+        <h2 className="mb-3 text-sm font-semibold text-neutral-800">Staff Alert Templates</h2>
         <p className="mb-3 text-xs text-neutral-500">
-          Staff notifications are sent as a normal WhatsApp message first, which only works if that staff member
-          has messaged your business number within the last 24 hours (Meta&apos;s session rule applies to staff
-          too, not just customers). These optional templates are used automatically as a fallback whenever that
-          fails, so an alert is never silently dropped.
+          When a template is set below, alerts are sent using it every time -- so staff (or you) never need to
+          have messaged the business number in the last 24 hours just to keep alerts flowing (Meta&apos;s session
+          rule applies to staff too, not just customers). If nothing is selected, alerts fall back to a normal
+          WhatsApp message, which only delivers within that 24-hour window.
         </p>
 
         {templates.filter((t) => t.status === 'approved').length === 0 && (
@@ -583,7 +583,8 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-neutral-600">
-              Handoff notification fallback (optional -- usually not needed, staff are typically active recently)
+              Handoff notification template (used every time a customer is handed off, for Kain Pasang and every
+              other product)
             </label>
             <select
               value={staffAlertDraft.staff_handoff_template ?? ''}
@@ -605,8 +606,9 @@ export default function SettingsPage() {
 
           <div>
             <label className="mb-1 block text-xs font-medium text-neutral-600">
-              2-day reminder fallback (recommended -- by the time this fires, staff have almost always gone quiet
-              too)
+              2-day reminder template (recommended -- by the time this fires, staff have almost always gone quiet
+              too, so a free-text reminder usually won&apos;t deliver). Needs its own template with exactly 2
+              variables (name, phone) -- the 4-variable handoff template above won&apos;t fit here.
             </label>
             <select
               value={staffAlertDraft.staff_reminder_template ?? ''}
@@ -636,7 +638,7 @@ export default function SettingsPage() {
           }
           className="mt-4 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
         >
-          {savingStaffAlerts ? 'Saving…' : 'Save fallback templates'}
+          {savingStaffAlerts ? 'Saving…' : 'Save alert templates'}
         </button>
       </section>
     </div>

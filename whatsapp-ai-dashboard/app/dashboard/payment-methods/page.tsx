@@ -7,6 +7,7 @@ import { PaymentMethod } from '@/lib/types';
 export default function PaymentMethodsPage() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [methodName, setMethodName] = useState('');
   const [accountHolder, setAccountHolder] = useState('');
@@ -16,9 +17,16 @@ export default function PaymentMethodsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   async function loadAll() {
-    const data = await backendApi.getPaymentMethods();
-    setMethods(data);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const data = await backendApi.getPaymentMethods();
+      setMethods(data);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load payment methods');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -52,6 +60,27 @@ export default function PaymentMethodsPage() {
     if (!confirm('Delete this payment method?')) return;
     await backendApi.deletePaymentMethod(id);
     loadAll();
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load payment methods: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadAll();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

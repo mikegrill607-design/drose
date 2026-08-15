@@ -11,23 +11,32 @@ export default function SystemPromptPage() {
   const [activeContent, setActiveContent] = useState('');
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function loadHistory() {
-    const { data } = await getSupabaseClient()
-      .from('system_prompt')
-      .select('*')
-      .order('created_at', { ascending: false });
-    const rows = (data as SystemPromptRow[]) ?? [];
-    setHistory(rows);
-    const active = rows.find((r) => r.is_active);
-    if (active) {
-      setActiveContent(active.content);
-      setDraft(active.content);
+    setLoadError(null);
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('system_prompt')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const rows = (data as SystemPromptRow[]) ?? [];
+      setHistory(rows);
+      const active = rows.find((r) => r.is_active);
+      if (active) {
+        setActiveContent(active.content);
+        setDraft(active.content);
+      }
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load system prompt history');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -55,6 +64,27 @@ export default function SystemPromptPage() {
   }
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load the system prompt: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadHistory();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl p-6">

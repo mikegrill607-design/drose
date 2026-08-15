@@ -21,6 +21,7 @@ function detectPlaceholderCount(body: string): number {
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('ms');
   const [category, setCategory] = useState<'MARKETING' | 'UTILITY'>('MARKETING');
@@ -42,9 +43,16 @@ export default function TemplatesPage() {
   const headerHasVariable = useMemo(() => /\{\{1\}\}/.test(headerText), [headerText]);
 
   async function load() {
-    const data = await backendApi.getTemplates();
-    setTemplates(data);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const data = await backendApi.getTemplates();
+      setTemplates(data);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load templates');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -124,6 +132,27 @@ export default function TemplatesPage() {
   }
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load templates: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl p-6">

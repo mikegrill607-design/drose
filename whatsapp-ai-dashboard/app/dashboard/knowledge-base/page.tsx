@@ -8,6 +8,7 @@ import { KnowledgeBaseEntry } from '@/lib/types';
 export default function KnowledgeBasePage() {
   const [entries, setEntries] = useState<KnowledgeBaseEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [keywords, setKeywords] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -16,9 +17,17 @@ export default function KnowledgeBasePage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function loadEntries() {
-    const { data } = await getSupabaseClient().from('knowledge_base').select('*').order('topic');
-    setEntries((data as KnowledgeBaseEntry[]) ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const { data, error } = await getSupabaseClient().from('knowledge_base').select('*').order('topic');
+      if (error) throw error;
+      setEntries((data as KnowledgeBaseEntry[]) ?? []);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load knowledge base');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -51,6 +60,27 @@ export default function KnowledgeBasePage() {
   async function handleToggleActive(entry: KnowledgeBaseEntry) {
     await backendApi.updateKbEntry(entry.id, { is_active: !entry.is_active });
     loadEntries();
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load the knowledge base: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadEntries();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

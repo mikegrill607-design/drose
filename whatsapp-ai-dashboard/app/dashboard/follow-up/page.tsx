@@ -19,18 +19,26 @@ export default function FollowUpPage() {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
   async function load() {
-    const [settingsData, templatesData] = await Promise.all([
-      backendApi.getFollowUpSettings(),
-      backendApi.getTemplates(),
-    ]);
-    setSettings(settingsData);
-    setDraft(settingsData);
-    setTemplates(templatesData);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [settingsData, templatesData] = await Promise.all([
+        backendApi.getFollowUpSettings(),
+        backendApi.getTemplates(),
+      ]);
+      setSettings(settingsData);
+      setDraft(settingsData);
+      setTemplates(templatesData);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load follow-up settings');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -58,6 +66,27 @@ export default function FollowUpPage() {
   }
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load follow-up settings: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            load();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl p-6">

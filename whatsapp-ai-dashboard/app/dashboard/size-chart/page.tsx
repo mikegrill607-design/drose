@@ -9,6 +9,7 @@ export default function SizeChartPage() {
   const [images, setImages] = useState<SizeChartImage[]>([]);
   const [topics, setTopics] = useState<KnowledgeBaseEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [productTopic, setProductTopic] = useState('');
   const [label, setLabel] = useState('');
@@ -17,13 +18,20 @@ export default function SizeChartPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   async function loadAll() {
-    const [chart, kb] = await Promise.all([
-      backendApi.getSizeChartImages(),
-      getSupabaseClient().from('knowledge_base').select('*').order('topic'),
-    ]);
-    setImages(chart);
-    setTopics((kb.data as KnowledgeBaseEntry[]) ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [chart, kb] = await Promise.all([
+        backendApi.getSizeChartImages(),
+        getSupabaseClient().from('knowledge_base').select('*').order('topic'),
+      ]);
+      setImages(chart);
+      setTopics((kb.data as KnowledgeBaseEntry[]) ?? []);
+    } catch (err) {
+      // Never leave the page stuck on "Loading..." -- show what broke instead.
+      setLoadError(err instanceof Error ? err.message : 'Failed to load size chart images');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -55,6 +63,27 @@ export default function SizeChartPage() {
     if (!confirm('Delete this size chart image?')) return;
     await backendApi.deleteSizeChartImage(id);
     loadAll();
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load size chart images: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+          and back in.
+        </p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            loadAll();
+          }}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (
