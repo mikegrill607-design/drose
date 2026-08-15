@@ -23,16 +23,25 @@ export default function ConversationListPage() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyConvId, setBusyConvId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
+    setLoadError(null);
 
     supabase
       .from('conversations')
       .select('*')
       .order('last_customer_message_at', { ascending: false })
-      .then((result: { data: Conversation[] | null }) => {
+      .then((result: { data: Conversation[] | null; error: { message: string } | null }) => {
+        if (result.error) {
+          // A failed fetch previously looked identical to "no conversations
+          // yet" -- show what actually broke instead of a misleading empty list.
+          setLoadError(result.error.message);
+          setLoading(false);
+          return;
+        }
         setConversations(result.data ?? []);
         setLoading(false);
       });
@@ -110,7 +119,21 @@ export default function ConversationListPage() {
     <div className="p-6">
       <h1 className="mb-4 text-lg font-semibold text-neutral-900">Conversations</h1>
 
-      {loading ? (
+      {loadError ? (
+        <div>
+          <p className="mb-2 text-sm text-red-600">Couldn&apos;t load conversations: {loadError}</p>
+          <p className="mb-4 text-xs text-neutral-500">
+            Usually means the backend URL is wrong/unreachable, or your login session expired -- try signing out
+            and back in.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : conversations.length === 0 ? (
         <p className="text-sm text-neutral-500">No conversations yet.</p>

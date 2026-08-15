@@ -103,11 +103,22 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [dailyCounts, setDailyCounts] = useState<DayCount[] | null>(null);
   const [funnel, setFunnel] = useState<FunnelStats | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   function loadAll() {
-    loadStats().then(setStats);
-    loadDailyCounts().then(setDailyCounts);
-    loadFunnelStats().then(setFunnel);
+    setLoadError(null);
+    // Previously unhandled -- a failed RPC (e.g. an expired session) left
+    // every stat tile blank forever with no error, indistinguishable from
+    // "just no data yet".
+    loadStats()
+      .then(setStats)
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load stats'));
+    loadDailyCounts()
+      .then(setDailyCounts)
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load daily counts'));
+    loadFunnelStats()
+      .then(setFunnel)
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load funnel stats'));
   }
 
   useEffect(() => {
@@ -130,6 +141,16 @@ export default function OverviewPage() {
     <div className="p-6">
       <h1 className="mb-1 text-lg font-semibold text-neutral-900">Overview</h1>
       <p className="mb-6 text-sm text-neutral-500">Welcome back! Here&apos;s what&apos;s happening.</p>
+
+      {loadError && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          Couldn&apos;t load some stats: {loadError} -- try signing out and back in, or{' '}
+          <button onClick={loadAll} className="underline">
+            retry
+          </button>
+          .
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatTile label="Conversations" value={stats?.totalConversations} />

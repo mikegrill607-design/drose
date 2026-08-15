@@ -21,6 +21,7 @@ export default function ConversationPage({
   const router = useRouter();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -35,19 +36,34 @@ export default function ConversationPage({
   useEffect(() => {
     const supabase = getSupabaseClient();
 
+    setLoadError(null);
+
     supabase
       .from('conversations')
       .select('*')
       .eq('id', conversationId)
       .single()
-      .then((result: { data: Conversation | null }) => setConversation(result.data));
+      .then((result: { data: Conversation | null; error: { message: string } | null }) => {
+        if (result.error) {
+          // Never leave the page stuck on "Loading..." -- show what broke instead.
+          setLoadError(result.error.message);
+          return;
+        }
+        setConversation(result.data);
+      });
 
     supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
-      .then((result: { data: Message[] | null }) => setMessages(result.data ?? []));
+      .then((result: { data: Message[] | null; error: { message: string } | null }) => {
+        if (result.error) {
+          setLoadError(result.error.message);
+          return;
+        }
+        setMessages(result.data ?? []);
+      });
 
     const channel = supabase
       .channel(`conversation-${conversationId}`)
@@ -146,6 +162,24 @@ export default function ConversationPage({
     if (!followUpText.trim()) return;
     await backendApi.sendCustomFollowUp(conversationId, followUpText.trim());
     setFollowUpText('');
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load this conversation: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means your login session expired, or this conversation was deleted -- try signing out and back
+          in, or go back to the conversation list.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (!conversation) {

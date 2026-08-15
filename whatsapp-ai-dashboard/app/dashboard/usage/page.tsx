@@ -19,6 +19,7 @@ export default function UsagePage() {
   const [rows, setRows] = useState<TokenUsageRow[]>([]);
   const [conversations, setConversations] = useState<Record<string, Conversation>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -26,6 +27,13 @@ export default function UsagePage() {
       supabase.from('token_usage').select('*').order('created_at', { ascending: false }),
       supabase.from('conversations').select('*'),
     ]).then(([usageRes, convRes]) => {
+      // Previously ignored -- a failed query (e.g. an expired session) left
+      // every number on this page at 0, indistinguishable from "no usage yet".
+      if (usageRes.error || convRes.error) {
+        setLoadError((usageRes.error ?? convRes.error)?.message ?? 'Failed to load usage data');
+        setLoading(false);
+        return;
+      }
       setRows((usageRes.data as TokenUsageRow[]) ?? []);
       const map: Record<string, Conversation> = {};
       for (const c of (convRes.data as Conversation[]) ?? []) map[c.id] = c;
@@ -59,6 +67,23 @@ export default function UsagePage() {
   }, [rows]);
 
   if (loading) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <p className="mb-2 text-sm text-red-600">Couldn&apos;t load usage data: {loadError}</p>
+        <p className="mb-4 text-xs text-neutral-500">
+          Usually means your login session expired -- try signing out and back in.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
