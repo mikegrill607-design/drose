@@ -2,6 +2,17 @@ import { getAppSettings } from './appSettings';
 
 const GRAPH_API_VERSION = 'v20.0';
 
+// WhatsApp usernames (rolled out June 2026) let a customer hide their phone
+// number -- inbound messages then carry a Business-Scoped User ID instead,
+// shaped "CC.<id>" (e.g. "MY.1096534252904391"), which is never a valid
+// phone number on its own. Sending to one requires "recipient" instead of
+// "to" (see https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids/).
+const BSUID_PATTERN = /^[A-Za-z]{2}\./;
+
+function recipientFields(to: string): Record<string, string> {
+  return BSUID_PATTERN.test(to) ? { recipient_type: 'individual', recipient: to } : { to };
+}
+
 export interface SendTextResult {
   ok: boolean;
   messageId: string | null;
@@ -32,7 +43,7 @@ export async function sendWhatsAppTextVerbose(to: string, text: string): Promise
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to,
+        ...recipientFields(to),
         type: 'text',
         text: { body: text },
       }),
@@ -91,7 +102,7 @@ export async function sendWhatsAppImage(
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to,
+        ...recipientFields(to),
         type: 'image',
         image: { link: imageUrl, ...(caption ? { caption } : {}) },
       }),

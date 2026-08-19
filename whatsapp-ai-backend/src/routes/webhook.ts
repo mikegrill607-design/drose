@@ -146,11 +146,17 @@ async function processStatusUpdate(status: any): Promise<void> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
 async function processInboundMessage(waMessage: any, customerName: string | undefined): Promise<void> {
-  const customerPhone: string = waMessage.from;
+  // waMessage.from is a real phone number. If the customer has adopted a
+  // WhatsApp username and hidden their number (rolled out June 2026), Meta
+  // omits "from" and sends a Business-Scoped User ID in "from_user_id"
+  // instead (shaped "CC.<id>") -- sendWhatsAppMessage/sendWhatsAppImage
+  // already know how to address either shape.
+  const customerPhone: string = waMessage.from ?? waMessage.from_user_id;
     const waMessageId: string = waMessage.id;
 
     if (!customerPhone) {
-      console.error('inbound message missing "from" -- raw message:', JSON.stringify(waMessage));
+      console.error('inbound message missing both "from" and "from_user_id" -- raw message:', JSON.stringify(waMessage));
+      return;
     }
 
     let text = '';
