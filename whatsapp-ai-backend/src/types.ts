@@ -39,6 +39,7 @@ export interface Conversation {
   awaiting_payment_receipt: boolean;
   pending_design_code: string | null;
   ad_referral: AdReferral | null;
+  qualifying_handoff_sent: boolean;
   created_at: string;
 }
 

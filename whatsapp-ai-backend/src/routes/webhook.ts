@@ -640,7 +640,7 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         }
         // Not enough info yet to narrow down designs -- fall through to a normal reply.
       }
-    } else if (intent.qualifyingComboMet) {
+    } else if (intent.qualifyingComboMet && !conversation.qualifying_handoff_sent) {
       const handoffMessage =
         (language === 'ms'
           ? 'Terima kasih! Staff kami akan follow up dengan koleksi yang sesuai sekejap lagi ya 😊'
@@ -656,6 +656,12 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       });
 
       await handoffToStaff(conversation, productGuess ?? 'Unknown -- see message below', intent.matchedDetails, text);
+      // One-time: without this, handing the conversation back to AI (staff.ts
+      // /handback) would immediately re-trigger this same branch on the very
+      // next customer message, since qualifyingComboMet is recomputed fresh
+      // from the whole message history every time and that size/sleeve info
+      // never goes away -- re-notifying the owner for nothing new.
+      await supabase.from('conversations').update({ qualifying_handoff_sent: true }).eq('id', conversation.id);
       await sendLeadToGoogleSheets({
         customerName: conversation.customer_name,
         customerPhone: conversation.customer_phone,
