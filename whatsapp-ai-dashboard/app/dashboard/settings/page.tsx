@@ -20,7 +20,7 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
 const APPS_SCRIPT_SNIPPET = `function doPost(e) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var data = JSON.parse(e.postData.contents);
-  var headers = ['Timestamp', 'Customer Name', 'Phone', 'Product', 'Details', 'Last Message', 'Status'];
+  var headers = ['Timestamp', 'Customer Name', 'Phone', 'Product', 'Details', 'Last Message', 'Status', 'Delivery Phone'];
 
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
@@ -34,7 +34,16 @@ const APPS_SCRIPT_SNIPPET = `function doPost(e) {
     data.details,
     data.lastMessage,
     data.status,
+    data.deliveryPhone,
   ];
+
+  // "Phone" (data.customerPhone) is a WhatsApp identity, not always a real
+  // number -- customers who've hidden their number via a WhatsApp username
+  // show up here as something like "MY.1096534252904391" instead. When the
+  // AI collects their real number for delivery separately, it arrives as
+  // deliveryPhone, kept in its own column rather than overwriting Phone --
+  // Phone stays the stable match key below either way, so this never causes
+  // a duplicate row for the same customer.
 
   // One row per customer -- if this phone number already has a row, update
   // it in place instead of adding a new one. Blank incoming fields (e.g. a

@@ -7,6 +7,13 @@ export interface LeadData {
   details: string; // '' to leave the existing sheet value untouched on an update
   lastMessage: string; // '' to leave the existing sheet value untouched on an update
   status: string; // e.g. 'New — chatting' | 'Qualified — handed to staff' | 'Purchased' | 'Not purchased'
+  // Real contact number captured from chat when customerPhone is a BSUID
+  // (WhatsApp username, hidden number -- see BSUID_PATTERN in lib/whatsapp.ts)
+  // rather than an actual phone number. '' (default) leaves the existing
+  // sheet value untouched, same as the other optional fields above --
+  // customerPhone stays the stable upsert key either way, so this never
+  // causes a duplicate row.
+  deliveryPhone?: string;
 }
 
 // POSTs a lead to the owner's Google Apps Script Web App, which upserts it
@@ -34,6 +41,7 @@ export async function sendLeadToGoogleSheets(lead: LeadData): Promise<void> {
         details: lead.details,
         lastMessage: lead.lastMessage,
         status: lead.status,
+        deliveryPhone: lead.deliveryPhone ?? '',
       }),
     });
     if (!res.ok) {

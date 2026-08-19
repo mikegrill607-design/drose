@@ -40,6 +40,7 @@ export interface Conversation {
   pending_design_code: string | null;
   ad_referral: AdReferral | null;
   qualifying_handoff_sent: boolean;
+  delivery_phone: string | null;
   created_at: string;
 }
 

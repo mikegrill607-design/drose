@@ -157,6 +157,21 @@ function deliveryPhoneAsk(customerPhone: string, language: 'ms' | 'en'): string 
     : '\n\nAlso, could you share a phone number for delivery? 😊';
 }
 
+// A real phone number, loosely: 8-15 digits, optionally with a leading + and
+// spaces/dashes between groups (covers "0123456789", "012-345 6789",
+// "+60123456789", etc.). Deliberately wide rather than Malaysia-specific --
+// this only ever runs on a BSUID customer's reply to deliveryPhoneAsk, not
+// on every message, so a false positive just means capturing digits that
+// weren't actually a phone number, not misfiring on unrelated chat.
+const PHONE_IN_TEXT_PATTERN = /\+?\d[\d\s-]{6,17}\d/;
+
+function extractPhoneFromText(text: string): string | null {
+  const match = text.match(PHONE_IN_TEXT_PATTERN);
+  if (!match) return null;
+  const digits = match[0].replace(/[\s-]/g, '');
+  return digits.replace(/^\+/, '').length >= 8 ? digits : null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
 async function processInboundMessage(waMessage: any, customerName: string | undefined): Promise<void> {
   // waMessage.from is a real phone number. If the customer has adopted a
@@ -199,6 +214,20 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
     if (adReferral) {
       await supabase.from('conversations').update({ ad_referral: adReferral }).eq('id', conversation.id);
       conversation.ad_referral = adReferral;
+    }
+
+    // Opportunistic capture: once deliveryPhoneAsk has asked a BSUID customer
+    // for a real contact number, their reply is just a normal chat message --
+    // no dedicated "awaiting" state, just scan every message from a BSUID
+    // customer until one look like a real phone number. Never overwrites
+    // once set, and never touches customer_phone itself (that stays the
+    // stable identity/upsert key everywhere else in this file).
+    if (BSUID_PATTERN.test(customerPhone) && !conversation.delivery_phone) {
+      const foundPhone = extractPhoneFromText(text);
+      if (foundPhone) {
+        await supabase.from('conversations').update({ delivery_phone: foundPhone }).eq('id', conversation.id);
+        conversation.delivery_phone = foundPhone;
+      }
     }
 
     await supabase.from('messages').insert({
@@ -265,6 +294,7 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
           details: details.join(', '),
           lastMessage: text,
           status: 'Qualified — receipt received, awaiting confirmation',
+          deliveryPhone: conversation.delivery_phone ?? '',
         });
         if (!conversation.lead_logged_to_sheets) {
           await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
@@ -432,6 +462,7 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
             details: details.join(', '),
             lastMessage: text,
             status: 'Qualified — payment link sent, awaiting receipt',
+            deliveryPhone: conversation.delivery_phone ?? '',
           });
           if (!conversation.lead_logged_to_sheets) {
             await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
@@ -669,6 +700,7 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         details: intent.matchedDetails.join(', '),
         lastMessage: text,
         status: 'Qualified — handed to staff',
+        deliveryPhone: conversation.delivery_phone ?? '',
       });
       if (!conversation.lead_logged_to_sheets) {
         await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
@@ -688,6 +720,7 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         details: '',
         lastMessage: text,
         status: 'Not qualified — chatting',
+        deliveryPhone: conversation.delivery_phone ?? '',
       });
       await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);
     }
@@ -815,6 +848,7 @@ async function proceedWithChosenDesign(
       details: details.join(', '),
       lastMessage: text,
       status: 'Qualified — handed to staff',
+      deliveryPhone: conversation.delivery_phone ?? '',
     });
     if (!conversation.lead_logged_to_sheets) {
       await supabase.from('conversations').update({ lead_logged_to_sheets: true }).eq('id', conversation.id);

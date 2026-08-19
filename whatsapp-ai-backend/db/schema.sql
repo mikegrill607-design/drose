@@ -22,6 +22,7 @@ create table conversations (
   chosen_design_code text, -- set once the customer settles on a design -- next reply is then interpreted as their payment method choice
   payment_method_chosen text, -- 'maybank' | 'bank_islam' etc, set once they answer
   qualifying_handoff_sent boolean not null default false, -- one-time: stops the generic 2-of-4-attribute handoff (e.g. Kemeja) from re-firing on every message after staff hand the conversation back to AI -- see src/routes/webhook.ts
+  delivery_phone text, -- captured from chat when customer_phone is a BSUID (hidden-number WhatsApp username, not a real phone) -- see BSUID_PATTERN in src/lib/whatsapp.ts
   created_at timestamptz not null default now()
 );
 

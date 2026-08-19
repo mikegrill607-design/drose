@@ -296,6 +296,7 @@ staffRouter.post('/mark-outcome', async (req, res) => {
       details: '',
       lastMessage: '',
       status: outcome === 'purchased' ? 'Purchased' : 'Not purchased',
+      deliveryPhone: conversation.delivery_phone ?? '',
     });
   }
 
