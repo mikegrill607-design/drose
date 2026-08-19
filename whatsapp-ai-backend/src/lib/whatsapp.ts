@@ -7,7 +7,7 @@ const GRAPH_API_VERSION = 'v20.0';
 // shaped "CC.<id>" (e.g. "MY.1096534252904391"), which is never a valid
 // phone number on its own. Sending to one requires "recipient" instead of
 // "to" (see https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids/).
-const BSUID_PATTERN = /^[A-Za-z]{2}\./;
+export const BSUID_PATTERN = /^[A-Za-z]{2}\./;
 
 function recipientFields(to: string): Record<string, string> {
   return BSUID_PATTERN.test(to) ? { recipient_type: 'individual', recipient: to } : { to };

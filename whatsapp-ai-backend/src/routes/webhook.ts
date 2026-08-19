@@ -3,7 +3,7 @@ import { Request, Router } from 'express';
 import { Sentry } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { getAppSettings } from '../lib/appSettings';
-import { sendWhatsAppMessage, sendWhatsAppImage, downloadWhatsAppMedia } from '../lib/whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppImage, downloadWhatsAppMedia, BSUID_PATTERN } from '../lib/whatsapp';
 import { uploadChatMedia } from '../lib/chatMedia';
 import { detectLanguage } from '../lib/language';
 import { resolveQualifyingCombo } from '../lib/intent';
@@ -143,6 +143,18 @@ async function processStatusUpdate(status: any): Promise<void> {
       .eq('wa_message_id', waMessageId);
     if (alertError) console.error('Failed to record delivery status on staff_alert_log for', waMessageId, alertError);
   }
+}
+
+// A BSUID customer_phone (see BSUID_PATTERN in lib/whatsapp.ts) isn't a real
+// number -- staff have nothing to call/deliver to. Appended to the fixed
+// handoff/confirmation messages so the customer's reply (their real number)
+// just lands in the chat thread for staff to read when they open the
+// conversation -- no separate state/column needed to track it.
+function deliveryPhoneAsk(customerPhone: string, language: 'ms' | 'en'): string {
+  if (!BSUID_PATTERN.test(customerPhone)) return '';
+  return language === 'ms'
+    ? '\n\nOh ya, boleh kongsi nombor telefon untuk penghantaran? 😊'
+    : '\n\nAlso, could you share a phone number for delivery? 😊';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Meta's webhook payload shape, not modeled elsewhere in this codebase
@@ -391,9 +403,10 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
           // function) -- staff shouldn't get pinged before the customer has
           // actually paid anything, just because they picked a bank.
           const confirmMessage =
-            language === 'ms'
+            (language === 'ms'
               ? `Terima kasih! Sila buat pembayaran menggunakan QR code di atas, dan hantar resit selepas bayar ya -- saya akan maklumkan staff sebaik sahaja resit diterima 😊`
-              : `Thank you! Please pay using the QR code above and send the receipt once done -- I'll let our team know the moment the receipt comes in 😊`;
+              : `Thank you! Please pay using the QR code above and send the receipt once done -- I'll let our team know the moment the receipt comes in 😊`) +
+            deliveryPhoneAsk(customerPhone, language);
           const confirmSentId = await sendWhatsAppMessage(customerPhone, confirmMessage);
           await supabase.from('messages').insert({
             conversation_id: conversation.id,
@@ -629,9 +642,10 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
       }
     } else if (intent.qualifyingComboMet) {
       const handoffMessage =
-        language === 'ms'
+        (language === 'ms'
           ? 'Terima kasih! Staff kami akan follow up dengan koleksi yang sesuai sekejap lagi ya 😊'
-          : "Thank you! Our team will follow up shortly with matching pieces 😊";
+          : "Thank you! Our team will follow up shortly with matching pieces 😊") +
+        deliveryPhoneAsk(customerPhone, language);
 
       const sentId = await sendWhatsAppMessage(customerPhone, handoffMessage);
       await supabase.from('messages').insert({
