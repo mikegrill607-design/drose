@@ -12,6 +12,7 @@ import {
   designCatalogHasEntriesForTopic,
   getNextDesignBatch,
   resolveQuotedDesignCode,
+  resolveMaterialOrColorFromText,
   DesignGroup,
 } from '../lib/designCatalog';
 import { getSizeChartImages } from '../lib/sizeChart';
@@ -501,8 +502,13 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         }
 
         if (ai.extractedAttributes?.wantsMoreDesigns) {
-          const material = ai.extractedAttributes?.material ?? null;
-          const color = ai.extractedAttributes?.color ?? null;
+          let material = ai.extractedAttributes?.material ?? null;
+          let color = ai.extractedAttributes?.color ?? null;
+          if (!material && !color) {
+            const fromText = await resolveMaterialOrColorFromText(topMatch.topic, text);
+            material = fromText.material;
+            color = fromText.color;
+          }
           const batch = await getNextDesignBatch(topMatch.topic, material, color, conversation.sent_design_codes);
 
           if (batch.groups.length > 0) {
@@ -549,8 +555,13 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
         // Designs already sent, no code named and not asking for more -- fall through to a normal reply.
       } else {
         // Stage 1: nothing shown yet.
-        const material = ai.extractedAttributes?.material ?? null;
-        const color = ai.extractedAttributes?.color ?? null;
+        let material = ai.extractedAttributes?.material ?? null;
+        let color = ai.extractedAttributes?.color ?? null;
+        if (!material && !color) {
+          const fromText = await resolveMaterialOrColorFromText(topMatch.topic, text);
+          material = fromText.material;
+          color = fromText.color;
+        }
 
         if (material || color) {
           const batch = await getNextDesignBatch(topMatch.topic, material, color, []);

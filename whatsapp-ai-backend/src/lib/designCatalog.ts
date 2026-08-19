@@ -74,6 +74,33 @@ async function groupsForTopic(topic: string, material: string | null, color: str
   };
 }
 
+// Same lesson as payment-method and design-code picking elsewhere in
+// webhook.ts: don't rely on the model's own material/color extraction
+// alone -- it can miss a plain, unambiguous answer like "Cotton Viscose"
+// even though it's an exact (or near-exact) match against a real catalog
+// tag. Only called as a fallback when the AI extracted neither, so it
+// never overrides a real extraction, just catches what it missed.
+export async function resolveMaterialOrColorFromText(
+  topic: string,
+  text: string
+): Promise<{ material: string | null; color: string | null }> {
+  const { data } = await supabase
+    .from('design_catalog')
+    .select('material, color')
+    .eq('product_topic', topic)
+    .eq('is_active', true);
+
+  const entries = (data ?? []) as { material: string | null; color: string | null }[];
+  const materials = [...new Set(entries.map((e) => e.material).filter((m): m is string => Boolean(m)))];
+  const colors = [...new Set(entries.map((e) => e.color).filter((c): c is string => Boolean(c)))];
+
+  const textNorm = text.toLowerCase();
+  const material = materials.find((m) => textNorm.includes(m.toLowerCase())) ?? null;
+  const color = colors.find((c) => textNorm.includes(c.toLowerCase())) ?? null;
+
+  return { material, color };
+}
+
 export interface DesignBatch {
   groups: DesignGroup[];
   hasMore: boolean;
