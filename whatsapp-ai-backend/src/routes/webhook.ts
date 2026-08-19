@@ -149,6 +149,10 @@ async function processInboundMessage(waMessage: any, customerName: string | unde
   const customerPhone: string = waMessage.from;
     const waMessageId: string = waMessage.id;
 
+    if (!customerPhone) {
+      console.error('inbound message missing "from" -- raw message:', JSON.stringify(waMessage));
+    }
+
     let text = '';
     let mediaUrl: string | null = null;
 
